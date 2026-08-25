@@ -32,7 +32,16 @@
 
 set -euo pipefail
 
-STUDIO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# One level up from apps/, not two. This has now broken three times on a directory move
+# (here, the tests' REPO_ROOT, and check_wiring's paths.py lookup): a path derived by
+# counting levels from a file's own location silently points somewhere plausible when the
+# file moves. The guard below turns that into an error that names the cause.
+STUDIO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[[ -f "$STUDIO/registries/manifest.hocon" ]] || {
+    echo "run_all.sh: computed the studio root as $STUDIO, which has no registries/manifest.hocon."
+    echo "That means this script moved and the level count above is wrong."
+    exit 1
+}
 NTTD_DIR="${NTTD_DIR:-$STUDIO/nttd}"
 WORKBENCH="${WORKBENCH:-$STUDIO/nttd-workbench}"
 LOG_DIR="$STUDIO/logs/nttd"
