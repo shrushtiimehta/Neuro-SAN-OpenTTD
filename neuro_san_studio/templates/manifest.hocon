@@ -1,7 +1,5 @@
 {
-    # Networks created by `agent_network_designer` are written under registries/generated/.
-    # The include keeps them visible to the server without editing this file by hand.
-    include "registries/generated/manifest.hocon",
-
-    "music_nerd.hocon": true
+    # Empty. The upstream example templates and the agent network designer that wrote into
+    # registries/generated/ were both removed from this fork; `ns init` scaffolds a project
+    # with no starter network rather than one that cannot parse.
 }

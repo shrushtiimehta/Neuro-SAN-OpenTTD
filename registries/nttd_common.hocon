@@ -132,6 +132,15 @@ Four things are true whatever is being moved:
 Never invent an identifier. Engine ids, coordinates, tiles and station ids all come from tools.
 If a tool refuses, read the reason: it is written for you, and repeating the call gets the same
 answer.
+
+Start the session by reading what earlier ones learned: read_playbook for playbook_common and
+playbook_strategist, then read_claims. A claim marked re_test_before_relying was established
+under different conditions — it tells you where to look, not what to conclude. Read
+current_best_plan and session_plan before your first move.
+
+Read the scratchpad at the start of every turn and write one at the end. Reading clears it, so a
+note is seen exactly once and cannot rot into stale advice. It is the only thing that carries a
+half-finished corridor from one turn to the next.
 """
 
 nttd_worker_conduct = """
@@ -140,4 +149,10 @@ it means for the decision at hand, in a few lines. Do not restate the whole worl
 
 If a tool returns an Error, say what it said and what you would need in order to proceed. Do not
 retry the same call unchanged.
+
+Read your own playbook before you decide anything: read_playbook for playbook_common and then the
+one for your job — Scout reads playbook_scout, Builder playbook_builder, FleetGrowth
+playbook_fleet, FleetCare playbook_care. It carries what earlier sessions established about your
+part of the job, including rules promoted because they held up. Read it once per session, not
+once per call.
 """

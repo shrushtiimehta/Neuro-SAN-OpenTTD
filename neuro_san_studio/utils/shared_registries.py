@@ -32,9 +32,8 @@ from typing import Tuple
 # Keep this as the single definition. It previously lived in two places, and the copies
 # drifted: `expertise_scoping_instructions.hocon` was added to neither, which left every
 # freshly scaffolded project unable to start.
-SHARED_REGISTRY_INCLUDES: Tuple[str, ...] = (
-    "aaosa.hocon",
-    "aaosa_basic.hocon",
-    "aaosa_basic_debug.hocon",
-    "expertise_scoping_instructions.hocon",
-)
+# Empty in this fork. The AAOSA fragments and expertise-scoping were removed with the upstream
+# example networks: the nttd networks deliberately do not use AAOSA, because its protocol asks
+# every down-chain agent who is responsible, and here the workers have fixed, known jobs — so the
+# extra model calls buy nothing. Nothing left in this tree substitutes these variables.
+SHARED_REGISTRY_INCLUDES: Tuple[str, ...] = ()
