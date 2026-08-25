@@ -79,7 +79,12 @@ def _value_floor(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def _built_but_idle(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Stations exist, nothing is being delivered. The depot usually cannot reach the line."""
+    """Stations exist, nothing is being delivered. The depot usually cannot reach the line.
+
+    `cargo_delivered` must come from the COMPANY row. It was read off `situation.earning` for a
+    while, which does not carry it, so this check saw 0 on every turn of every run and would have
+    fired on a healthy session — the reason the threshold is worth stating out loud.
+    """
     recent = _tail(rows, SUSTAINED_TURNS)
     if not recent:
         return None
@@ -139,7 +144,35 @@ def _repeated_refusals(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     }
 
 
-CHECKS = (_value_floor, _built_but_idle, _fleet_wide_stall, _repeated_refusals)
+def _fleet_mostly_losing(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Most of the fleet losing money while the totals look healthy.
+
+    Added after a live run showed `vehicles_earning: 1` beside `vehicles_losing: 2` on a route
+    the totals reported as profitable — one strong earner was carrying two that never would.
+    A fleet total cannot show that, and it is the difference between "buy another" and "work out
+    why those two are not paying".
+    """
+    recent = _tail(rows, SUSTAINED_TURNS)
+    if not recent:
+        return None
+    last = recent[-1]
+    earning, losing = _int(last, "vehicles_earning"), _int(last, "vehicles_losing")
+    if earning + losing == 0 or losing <= earning:
+        return None
+    if not all(_int(r, "vehicles_losing") > _int(r, "vehicles_earning") for r in recent):
+        return None
+    return {
+        "signature": "fleet_mostly_losing",
+        "what_the_engine_is_saying": (
+            f"turn {_int(last, 'turn')}: {losing} vehicle(s) losing money against {earning} "
+            f"earning, for {len(recent)} turns. The fleet total can be positive while most of it "
+            "is not paying — one strong earner carries the rest and the average hides them."
+        ),
+        "turns": [_int(r, "turn") for r in recent],
+    }
+
+
+CHECKS = (_value_floor, _built_but_idle, _fleet_wide_stall, _repeated_refusals, _fleet_mostly_losing)
 
 
 def run(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

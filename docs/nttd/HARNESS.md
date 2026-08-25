@@ -61,7 +61,7 @@ defaults to `registries/manifest.hocon`, which serves the upstream examples inst
 
 ```
 coded_tools/config_files/   the SEEDS    survive a fresh start
-coded_tools/state/         the WORKING copies + the commons
+state/         the WORKING copies + the commons
 logs/nttd/                      the TELEMETRY
 ```
 

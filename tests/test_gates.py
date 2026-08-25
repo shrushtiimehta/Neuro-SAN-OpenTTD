@@ -3,7 +3,7 @@
 The knowledge layer's whole value is that a model cannot write a confident wrong verdict into
 the commons. That is enforced in code, not in prompts — so it is worth exactly one test file.
 
-Every path in `paths.py` is RELATIVE (`coded_tools/state`), so `chdir` into a tmp dir is
+Every path in `paths.py` is RELATIVE (`state`), so `chdir` into a tmp dir is
 all the isolation these need. No fixtures, no mocks, no monkeypatching of module constants.
 """
 

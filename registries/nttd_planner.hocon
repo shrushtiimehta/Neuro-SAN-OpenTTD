@@ -302,17 +302,17 @@ than against its final figures.
             name_map = {
                 # All six, because the planner is the only thing that promotes and a promotion
                 # can land in any of them.
-                playbook_common     = "coded_tools/state/playbook_common.md"
-                playbook_strategist = "coded_tools/state/playbook_strategist.md"
-                playbook_scout      = "coded_tools/state/playbook_scout.md"
-                playbook_builder    = "coded_tools/state/playbook_builder.md"
-                playbook_fleet      = "coded_tools/state/playbook_fleet.md"
-                playbook_care       = "coded_tools/state/playbook_care.md"
-                current_best_plan   = "coded_tools/state/current_best_plan.md"
-                session_plan        = "coded_tools/state/session_plan.md"
-                claims              = "coded_tools/state/claims.md"
-                open_questions      = "coded_tools/state/open_questions.md"
-                champion            = "coded_tools/state/champion.json"
+                playbook_common     = "state/playbook_common.md"
+                playbook_strategist = "state/playbook_strategist.md"
+                playbook_scout      = "state/playbook_scout.md"
+                playbook_builder    = "state/playbook_builder.md"
+                playbook_fleet      = "state/playbook_fleet.md"
+                playbook_care       = "state/playbook_care.md"
+                current_best_plan   = "state/current_best_plan.md"
+                session_plan        = "state/session_plan.md"
+                claims              = "state/claims.md"
+                open_questions      = "state/open_questions.md"
+                champion            = "state/champion.json"
             }
         }
     }

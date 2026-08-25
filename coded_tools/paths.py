@@ -43,8 +43,8 @@ from typing import Final
 # Relative rather than absolute so a checkout can be moved or cloned twice without editing
 # anything, which is also how neuro-san-studio's own AGENT_MANIFEST_FILE is written.
 CONFIG_DIR: Final = "coded_tools/config_files"
-STATE_DIR: Final = "coded_tools/state"
-HISTORY_DIR: Final = "coded_tools/state/playbook_history"
+STATE_DIR: Final = "state"
+HISTORY_DIR: Final = "state/playbook_history"
 LOG_DIR: Final = "logs/nttd"
 
 # --- the playbooks ------------------------------------------------------------------------
@@ -168,6 +168,20 @@ def turn_log(session_number: int) -> str:
 # from. Append-only and never archived, because a champion that vanished when logs were
 # rotated is a champion the next run cannot aim at.
 SESSION_LOG_PATH: Final = os.path.join(LOG_DIR, "sessions.jsonl")
+
+
+# The engine's own view of the world, per turn, as JSON.
+#
+# The player reads this LIVE over HTTP via `read_situation`; nothing reads these files back. They
+# exist so a person can see exactly what the agent was looking at when it decided something —
+# the turn row keeps the dozen numbers the score needs, and drops the stations, the vehicles and
+# the engine's problem text, which is most of what you want when asking why a turn went wrong.
+def situation_file(session_number: int, turn: int) -> str:
+    """One turn's full world payload."""
+    return os.path.join(SITUATION_DIR, f"s{session_number:03d}", f"turn_{turn:03d}.json")
+
+
+SITUATION_DIR: Final = os.path.join(LOG_DIR, "situations")
 
 # Where archived per-session turn logs go on a fresh start.
 ARCHIVE_DIR: Final = os.path.join(LOG_DIR, "prior-runs")

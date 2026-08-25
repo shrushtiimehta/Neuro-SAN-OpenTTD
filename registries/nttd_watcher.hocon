@@ -174,19 +174,19 @@ not an answer this tool is entitled to give.
         class = "coded_tools.state_read.StateRead"
         args = {
             name_map = {
-                session_plan             = "coded_tools/state/session_plan.md"
+                session_plan             = "state/session_plan.md"
                 # Only these two. The watcher judges whether a run is on track; it never
                 # edits a playbook and has no use for the builder's water crossings or the
                 # fleet's engine scoring. Handing it all six would be five sixths of a
                 # context window spent on advice for somebody else.
-                playbook_common          = "coded_tools/state/playbook_common.md"
-                playbook_strategist      = "coded_tools/state/playbook_strategist.md"
+                playbook_common          = "state/playbook_common.md"
+                playbook_strategist      = "state/playbook_strategist.md"
                 # The commons, read-only here: the watcher looks at what past sessions
                 # established but never revises it. Refutation needs the whole run in view.
-                claims                   = "coded_tools/state/claims.md"
-                open_questions           = "coded_tools/state/open_questions.md"
-                current_best_plan        = "coded_tools/state/current_best_plan.md"
-                champion                 = "coded_tools/state/champion.json"
+                claims                   = "state/claims.md"
+                open_questions           = "state/open_questions.md"
+                current_best_plan        = "state/current_best_plan.md"
+                champion                 = "state/champion.json"
             }
         }
     }

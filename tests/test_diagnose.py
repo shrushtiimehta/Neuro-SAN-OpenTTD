@@ -177,3 +177,31 @@ def test_the_runner_writes_the_shape_diagnose_reads():
 
 def test_tally_survives_a_ledger_of_junk():
     assert _tally([None, "nonsense", {"action": "a"}, {}], "action") == {"a": 1, "?": 1}
+
+
+# --- most of the fleet losing while the totals look fine -----------------------------------------
+
+
+def test_a_fleet_mostly_losing_money_is_reported():
+    rows = [_row(t, vehicles_earning=1, vehicles_losing=2) for t in range(1, diagnose.SUSTAINED_TURNS + 1)]
+    assert "fleet_mostly_losing" in _fired(rows)
+
+
+def test_a_mostly_earning_fleet_is_not():
+    rows = [_row(t, vehicles_earning=3, vehicles_losing=1) for t in range(1, diagnose.SUSTAINED_TURNS + 1)]
+    assert "fleet_mostly_losing" not in _fired(rows)
+
+
+def test_the_cargo_figure_comes_from_the_company_row_not_from_earning():
+    """`situation.earning` carries no cumulative cargo; reading it there returned 0 forever."""
+    pos = {
+        "money": {"company_value": 50_000},
+        "built": {"stations": 2, "vehicles": 3},
+        "earning": {"vehicles_earning": 1, "vehicles_losing": 2, "fleet_profit_this_year": 9866},
+        "problems": [],
+    }
+    firm = {"cargo_delivered_total": 176, "performance_rating": 0, "q0_cargo": 176, "q0_income": 13312}
+    row = _turn_row("sess", 1, 4, {"game_date": 100}, pos, 1.0, {}, firm)
+    assert row["cargo_delivered"] == 176, "the company row is the only place this exists"
+    assert row["vehicles_earning"] == 1 and row["vehicles_losing"] == 2
+    assert "built_but_delivering_nothing" not in _fired([row] * diagnose.SUSTAINED_TURNS)

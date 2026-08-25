@@ -43,9 +43,11 @@ from typing import Any
 
 import httpx
 
+from coded_tools import paths
 from coded_tools import seed_playbooks
 from coded_tools import session_number
 from coded_tools import telemetry
+from coded_tools.file_io import FileIO
 
 logger = logging.getLogger("nttd.runner")
 
@@ -55,6 +57,11 @@ API_URL = os.environ.get("NTTD_API_URL", "http://127.0.0.1:8000")
 # started by hand says the same thing as one started by the script: the runner is the only thing
 # that knows what it is.
 SYSTEM_TYPE = "neuro-san"
+
+# What the agents accumulate that has no other record. Listed by NAME rather than copied wholesale
+# because sly_data also carries the session id and the participant token, and a snapshot written
+# to disk is precisely where a credential must not end up.
+AGENT_STATE_KEYS = ("sites", "decisions", "routes", "plan", "fleet_seen", "refusals", "turns")
 
 # How long the client waits on a silent stream.
 #
@@ -123,6 +130,28 @@ def situation(session: str, token: str) -> dict[str, Any]:
         return reply.json()
     except httpx.HTTPError as failure:
         logger.warning("Could not read the situation: %r", failure)
+        return {}
+
+
+def company(session: str, token: str, company_id: int = 0) -> dict[str, Any]:
+    """The company row: cargo delivered, rating, value.
+
+    A SECOND call, because `situation.earning` does not carry `cargo_delivered_total` — it has
+    income and per-vehicle profit and nothing cumulative. Reading it off `earning` returned 0 on
+    every turn of every run, which made the board's tiebreak metric dead, made `diagnose` report
+    "built but delivering nothing" forever, and fed the planner a false premise to raise claims
+    against. Measured against a live session: earning said 0, the company row said 176.
+    """
+    try:
+        reply = httpx.get(
+            f"{API_URL}/v1/participant/sessions/{session}/state/company/{company_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60,
+        )
+        reply.raise_for_status()
+        return reply.json()
+    except httpx.HTTPError as failure:
+        logger.warning("Could not read the company: %r", failure)
         return {}
 
 
@@ -401,7 +430,29 @@ def play(  # pylint: disable=too-many-locals,too-many-branches,too-many-statemen
 
         now = status(session)
         pos = situation(session, token) if not now.get("ended") else {}
-        telemetry.record_turn(_turn_row(session, number, turn, now, pos, spent, state.get("sly_data")))
+        firm = company(session, token) if not now.get("ended") else {}
+        sly = state.get("sly_data") or {}
+        telemetry.record_turn(_turn_row(session, number, turn, now, pos, spent, sly, firm))
+        # Everything the turn row reduces away, kept whole:
+        #   situation  every station and vehicle with its tile and x/y, every route with whether
+        #              it is working and what is missing, and the engine's problem text with its
+        #              own "why it matters" — which on a live run was naming the fix outright.
+        #   company    the cumulative figures the board ranks on.
+        #   sly_data   what the AGENTS built up, and the part with no other record: `sites` is the
+        #              surveyed map, `decisions` is what the strategist chose and why, `routes`
+        #              and `plan` are what it staged. Credentials are excluded by name.
+        if pos or firm:
+            FileIO.write_json(
+                paths.situation_file(number, turn),
+                {
+                    "turn": turn,
+                    "status": now,
+                    "situation": pos,
+                    "company": firm,
+                    "agents": {k: sly.get(k) for k in AGENT_STATE_KEYS if k in sly},
+                },
+                logger,
+            )
 
         said = (state.get("last_chat_response") or "").strip()
         today = int(now.get("game_date") or 0)
@@ -441,7 +492,19 @@ def play(  # pylint: disable=too-many-locals,too-many-branches,too-many-statemen
     final = status(session)
     pos = situation(session, token)
     telemetry.record_session(
-        _session_row(session, number, turn, final, pos, spent, aborted, end_reason, args.scenario, mode or "stepped")
+        _session_row(
+            session,
+            number,
+            turn,
+            final,
+            pos,
+            spent,
+            aborted,
+            end_reason,
+            args.scenario,
+            mode or "stepped",
+            company(session, token),
+        )
     )
     print(f"\n{end_reason or 'the session ended'}. spend ${spent:.2f} over {turn} turn(s).")
 
@@ -477,7 +540,14 @@ def _watch(args: argparse.Namespace, number: int, turn: int, conditions: str) ->
 
 
 def _turn_row(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    session: str, number: int, turn: int, game: dict, pos: dict, spent: float, sly: dict | None = None
+    session: str,
+    number: int,
+    turn: int,
+    game: dict,
+    pos: dict,
+    spent: float,
+    sly: dict | None = None,
+    firm: dict | None = None,
 ) -> dict[str, Any]:
     """One JSONL row per turn. Flat by design: the row IS the schema, so it takes the fields.
 
@@ -503,8 +573,16 @@ def _turn_row(  # pylint: disable=too-many-arguments,too-many-positional-argumen
         # Named for what it is. The engine reports its own delivered total; nothing here
         # recomputes it, because a runner that recalculated the marking scheme would duplicate the
         # engine and disagree with it on the first edge case.
-        "cargo_delivered": int(earning.get("cargo_delivered_total") or 0),
-        "performance_rating": int(earning.get("performance_rating") or -1),
+        # From the COMPANY row, not from `earning`, which carries neither. See company().
+        "cargo_delivered": int((firm or {}).get("cargo_delivered_total") or 0),
+        "performance_rating": int((firm or {}).get("performance_rating", -1) or 0),
+        "quarter_cargo": int((firm or {}).get("q0_cargo") or 0),
+        "quarter_income": int((firm or {}).get("q0_income") or 0),
+        # The fleet split: one earner beside two losers is a different turn from three earners,
+        # and the totals cannot tell them apart.
+        "vehicles_earning": int(earning.get("vehicles_earning") or 0),
+        "vehicles_losing": int(earning.get("vehicles_losing") or 0),
+        "fleet_profit": int(earning.get("fleet_profit_this_year") or 0),
         "stations": int(built.get("stations") or 0),
         "vehicles": int(built.get("vehicles") or 0),
         "routes": int(built.get("routes") or 0),
@@ -541,19 +619,22 @@ def _session_row(  # pylint: disable=too-many-arguments,too-many-positional-argu
     end_reason: str,
     scenario: str | None,
     mode: str,
+    firm: dict | None = None,
 ) -> dict[str, Any]:
     money = pos.get("money") or {}
     earning = pos.get("earning") or {}
     return {
         "session": session,
+        "vehicles_earning": int(earning.get("vehicles_earning") or 0),
+        "vehicles_losing": int(earning.get("vehicles_losing") or 0),
         "session_number": number,
         "scenario": scenario or "",
         "mode": mode,
         "turns": turns,
         "game_days": int(game.get("game_date") or 0),
         "company_value": int(money.get("company_value") or 0),
-        "total_cargo": int(earning.get("cargo_delivered_total") or 0),
-        "performance_rating": int(earning.get("performance_rating") or -1),
+        "total_cargo": int((firm or {}).get("cargo_delivered_total") or 0),
+        "performance_rating": int((firm or {}).get("performance_rating", -1) or 0),
         "aborted": aborted,
         "end_reason": end_reason,
         "spend_usd": spent,

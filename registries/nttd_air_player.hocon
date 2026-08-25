@@ -509,14 +509,14 @@ cannot be done in one step. Recovering the capital beats paying to keep somethin
         class = "coded_tools.state_read.StateRead"
         args = {
             name_map = {
-                playbook_common     = "coded_tools/state/playbook_common.md"
-                playbook_strategist = "coded_tools/state/playbook_strategist.md"
-                playbook_scout      = "coded_tools/state/playbook_scout.md"
-                playbook_builder    = "coded_tools/state/playbook_builder.md"
-                playbook_fleet      = "coded_tools/state/playbook_fleet.md"
-                playbook_care       = "coded_tools/state/playbook_care.md"
-                session_plan        = "coded_tools/state/session_plan.md"
-                current_best_plan   = "coded_tools/state/current_best_plan.md"
+                playbook_common     = "state/playbook_common.md"
+                playbook_strategist = "state/playbook_strategist.md"
+                playbook_scout      = "state/playbook_scout.md"
+                playbook_builder    = "state/playbook_builder.md"
+                playbook_fleet      = "state/playbook_fleet.md"
+                playbook_care       = "state/playbook_care.md"
+                session_plan        = "state/session_plan.md"
+                current_best_plan   = "state/current_best_plan.md"
             }
         }
     }
