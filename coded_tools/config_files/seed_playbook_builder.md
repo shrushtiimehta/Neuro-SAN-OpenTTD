@@ -2,21 +2,9 @@
 
 Turns a chosen corridor into something that actually carries, and confirms what landed.
 
-**Every claim here is cited.** The tag at the end of a line names the document it came from, and
-nothing in this file is absent from one of them:
-
-| tag | document |
-|---|---|
-| `[common]` | `nttd-workbench/agents/strategy/common.md` |
-| `[air]` | `nttd-workbench/agents/strategy/air.md` |
-| `[rail]` | `nttd-workbench/agents/strategy/rail.md` |
-| `[gameplay]` | `nttd/docs/gameplay_guide.md` |
-| `[design]` | `nttd-workbench/agents/neuro_san/DESIGN.md` |
-| `[ns-common]` / `[ns-air]` | the workbench registries |
-
 This is strategy, not reference. What an action is called and what it takes is served live by the
 engine at `GET /v1/public/actions`; a hand-written parameter list is the thing that goes stale, so
-there is none here. `[common]` `[design]`
+there is none here.
 
 Confirmed trials are promoted under the learned-rules heading at the foot of this file, tagged with
 the number of the session that confirmed them. Do not edit those lines by hand — the promotion tool
@@ -36,26 +24,25 @@ Turning a chosen corridor into something that actually carries.
 5. Buy the aircraft, give it orders between the two airports.
 
 The split between building and buying is real, not superstition: **the airport must exist before
-its hangar can be found.** `[air]`
+its hangar can be found.**
 
 The hangar tile is not derivable from the airport tile. Four consecutive `buy_vehicle` calls at
 the airport coordinates failed with `ERR_UNKNOWN` and no diagnostic. Resolve it from
-`get_hangars`, never by arithmetic. `[design]`
+`get_hangars`, never by arithmetic.
 
-Stage both airports so they cost ONE game day together rather than one each. `[ns-air]`
+Stage both airports so they cost ONE game day together rather than one each.
 
 **Start with the smallest airport type** that serves the need: a smaller footprint fits where
 nothing else does, and on a crowded or hilly map the difference between a route and no route is
-usually whether the airport fitted. `[air]`
+usually whether the airport fitted.
 
 After the commit, confirm what landed — check the airport attached to the town that was intended.
-`[ns-air]`
 
 ### Air: the refusal to expect
 
 A town will refuse a further station once it already has several, reporting too many stations in
 that town. The fix is **another town, not another tile**: retrying nearby in the same town will
-keep failing. `[air]`
+keep failing.
 
 ### Rail: the order of work, and it is not the obvious one
 
@@ -78,37 +65,35 @@ keep failing. `[air]`
    around; it is the wrong order.
 6. Buy the train and give it orders.
 
-`[rail]`
-
 ### Rail: where the depot goes
 
 A depot built beside a platform joins that station's **stub** of track, not the main line.
 Measured at three towns, every such depot reached 5 to 8 tiles of a 71-tile line. **Put the depot
 against the middle of the corridor instead**, and trace from the depot rather than between
-platforms. `[gameplay]`
+platforms.
 
 ### Rail: water crossings
 
 A corridor that crosses water fails as `ERR_TUNNEL_CANNOT_BUILD_ON_WATER`: the connection reaches
 for a tunnel where the crossing needs a bridge, and the bridge heads must be at equal height.
-This defeated five of six routes on one map. `[gameplay]`
+This defeated five of six routes on one map.
 
 ### Rail: laying track yourself
 
 `build_path` takes the tiles you chose and works out how each piece must sit, including the
 three-tile context rail needs. Use it for a route of your own design; use `connect_rail` when you
 would rather the pathfinder chose. `build_rail_track` lays a single piece in a chosen orientation
-and is the only way to express a siding, a junction stub or a passing loop. `[rail]`
+and is the only way to express a siding, a junction stub or a passing loop.
 
 `connect_rail` and `connect_road` must be alone in a step: they lay a whole corridor, can
 partially fail on a single tile, and the refusal names that tile. Batching them with anything else
-makes the report ambiguous about which action the coordinate belongs to. `[design]`
+makes the report ambiguous about which action the coordinate belongs to.
 
 ### Rail: signals
 
 Signals are what let more than one train share a line. A single train on a simple out-and-back
 route does not need them; add them when a second train joins. One unsignalled line cannot take two
-trains. `[rail]` `[design]`
+trains.
 
 ---
 

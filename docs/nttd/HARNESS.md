@@ -223,6 +223,27 @@ neuro-san itself.
 
 ---
 
+## 10a. Where the seed playbooks came from
+
+Nothing in `coded_tools/config_files/seed_playbook_*.md` was invented. Every line was taken from
+one of:
+
+- `nttd-workbench/agents/strategy/{common,air,rail}.md`
+- `nttd/docs/gameplay_guide.md`
+- `nttd-workbench/agents/neuro_san/DESIGN.md`
+- the workbench registries
+
+The seeds used to carry a per-line `[gameplay]`-style tag and a table mapping the tags to those
+paths. Both were removed: the agents cannot open any of those files — none is in a `name_map` —
+so a citation was a pointer to something unreachable, costing about 1,050 tokens every time a
+playbook was read. The provenance is recorded here instead, and the tagged version is in git
+history before that commit.
+
+**Keep the property, not the tags.** A new seed line should still be traceable to one of the
+documents above, or marked as a claim to be tested.
+
+---
+
 ## 11. What's missing
 
 Updated 2026-08-25. Items 2 to 5 of the original list were written mid-build and have since
