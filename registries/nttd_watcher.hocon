@@ -115,7 +115,7 @@ agent to stop testing something. The tool rejects all of it.
 How this session is going, turn by turn, and how it compares to the best session AT THE SAME GAME
 DAY. Call this first.
 """ }
-        class = "coded_tools.nttd.telemetry.SessionTelemetry"
+        class = "coded_tools.telemetry.SessionTelemetry"
     }
 
     {
@@ -129,13 +129,13 @@ of these produces a run that looks busy from the inside and scores nothing.
 It reports what is wrong. It does not say what to do about it: that is a claim to raise and test,
 not an answer this tool is entitled to give.
 """ }
-        class = "coded_tools.nttd.diagnose.Diagnose"
+        class = "coded_tools.diagnose.Diagnose"
     }
 
     {
         name = "run_telemetry"
         function = { description = "Every finished session with its final figures, and the best one so far." }
-        class = "coded_tools.nttd.telemetry.RunTelemetry"
+        class = "coded_tools.telemetry.RunTelemetry"
     }
 
     {
@@ -150,7 +150,7 @@ not an answer this tool is entitled to give.
                 }
             }
         }
-        class = "coded_tools.nttd.read_claims.ReadClaims"
+        class = "coded_tools.read_claims.ReadClaims"
         args = { with_evidence = true }
     }
 
@@ -171,22 +171,22 @@ not an answer this tool is entitled to give.
                 required = ["name"]
             }
         }
-        class = "coded_tools.nttd.state_read.StateRead"
+        class = "coded_tools.state_read.StateRead"
         args = {
             name_map = {
-                session_plan             = "coded_tools/nttd/state/session_plan.md"
+                session_plan             = "coded_tools/state/session_plan.md"
                 # Only these two. The watcher judges whether a run is on track; it never
                 # edits a playbook and has no use for the builder's water crossings or the
                 # fleet's engine scoring. Handing it all six would be five sixths of a
                 # context window spent on advice for somebody else.
-                playbook_common          = "coded_tools/nttd/state/playbook_common.md"
-                playbook_strategist      = "coded_tools/nttd/state/playbook_strategist.md"
+                playbook_common          = "coded_tools/state/playbook_common.md"
+                playbook_strategist      = "coded_tools/state/playbook_strategist.md"
                 # The commons, read-only here: the watcher looks at what past sessions
                 # established but never revises it. Refutation needs the whole run in view.
-                claims                   = "coded_tools/nttd/state/claims.md"
-                open_questions           = "coded_tools/nttd/state/open_questions.md"
-                current_best_plan        = "coded_tools/nttd/state/current_best_plan.md"
-                champion                 = "coded_tools/nttd/state/champion.json"
+                claims                   = "coded_tools/state/claims.md"
+                open_questions           = "coded_tools/state/open_questions.md"
+                current_best_plan        = "coded_tools/state/current_best_plan.md"
+                champion                 = "coded_tools/state/champion.json"
             }
         }
     }
@@ -202,7 +202,7 @@ not an answer this tool is entitled to give.
                 }
             }
         }
-        class = "coded_tools.nttd.scratchpad.Scratchpad"
+        class = "coded_tools.scratchpad.Scratchpad"
         args = { pad = "watcher" }
     }
 
@@ -227,7 +227,7 @@ not an answer this tool is entitled to give.
                 required = ["claim", "domain", "conditions"]
             }
         }
-        class = "coded_tools.nttd.log_claim.LogClaim"
+        class = "coded_tools.log_claim.LogClaim"
         # Recorded as watcher-origin so a later reader can ask whether mid-session observations
         # are worth as much as boundary ones.
         args = { origin = "watcher" }

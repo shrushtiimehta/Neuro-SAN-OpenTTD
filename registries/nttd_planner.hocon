@@ -151,7 +151,7 @@ Every finished session with its final figures, the best one so far, and how the 
 compared. Ranked on company_value with total_cargo breaking a tie, which is what the board ranks
 on. Call this FIRST at both boundaries.
 """ }
-        class = "coded_tools.nttd.telemetry.RunTelemetry"
+        class = "coded_tools.telemetry.RunTelemetry"
     }
 
     {
@@ -165,7 +165,7 @@ of these produces a run that looks busy from the inside and scores nothing.
 It reports what is wrong. It does not say what to do about it: that is a claim to raise and test,
 not an answer this tool is entitled to give.
 """ }
-        class = "coded_tools.nttd.diagnose.Diagnose"
+        class = "coded_tools.diagnose.Diagnose"
     }
 
     {
@@ -175,7 +175,7 @@ How the current session went, turn by turn: cargo, company value, cash, loan, wh
 the trend over the last few turns. Compares against the best session AT THE SAME GAME DAY rather
 than against its final figures.
 """ }
-        class = "coded_tools.nttd.telemetry.SessionTelemetry"
+        class = "coded_tools.telemetry.SessionTelemetry"
     }
 
     {
@@ -191,7 +191,7 @@ than against its final figures.
                 }
             }
         }
-        class = "coded_tools.nttd.read_claims.ReadClaims"
+        class = "coded_tools.read_claims.ReadClaims"
         # The curator sees the evidence. A player agent deliberately does not: an agent told what
         # would falsify its instruction optimises for the criterion instead of playing.
         args = { with_evidence = true }
@@ -219,7 +219,7 @@ than against its final figures.
                 required = ["claim", "domain", "conditions"]
             }
         }
-        class = "coded_tools.nttd.log_claim.LogClaim"
+        class = "coded_tools.log_claim.LogClaim"
         args = { origin = "planner" }
     }
 
@@ -240,7 +240,7 @@ than against its final figures.
                 required = ["headline", "plan", "rests_on"]
             }
         }
-        class = "coded_tools.nttd.current_best_plan.WriteCurrentBestPlan"
+        class = "coded_tools.current_best_plan.WriteCurrentBestPlan"
     }
 
     {
@@ -257,7 +257,7 @@ than against its final figures.
                 required = ["plan"]
             }
         }
-        class = "coded_tools.nttd.write_session_plan.WriteSessionPlan"
+        class = "coded_tools.write_session_plan.WriteSessionPlan"
     }
 
     {
@@ -275,7 +275,7 @@ than against its final figures.
                 required = ["domain", "edit_type"]
             }
         }
-        class = "coded_tools.nttd.promote_claim.PromoteClaim"
+        class = "coded_tools.promote_claim.PromoteClaim"
     }
 
     {
@@ -295,24 +295,24 @@ than against its final figures.
                 required = ["name"]
             }
         }
-        class = "coded_tools.nttd.state_read.StateRead"
+        class = "coded_tools.state_read.StateRead"
         # Deny-by-default: the model passes a NAME and never a path, so only what is listed here
         # is addressable. That closes off typos, invented directories and `..` escapes at once.
         args = {
             name_map = {
                 # All six, because the planner is the only thing that promotes and a promotion
                 # can land in any of them.
-                playbook_common     = "coded_tools/nttd/state/playbook_common.md"
-                playbook_strategist = "coded_tools/nttd/state/playbook_strategist.md"
-                playbook_scout      = "coded_tools/nttd/state/playbook_scout.md"
-                playbook_builder    = "coded_tools/nttd/state/playbook_builder.md"
-                playbook_fleet      = "coded_tools/nttd/state/playbook_fleet.md"
-                playbook_care       = "coded_tools/nttd/state/playbook_care.md"
-                current_best_plan   = "coded_tools/nttd/state/current_best_plan.md"
-                session_plan        = "coded_tools/nttd/state/session_plan.md"
-                claims              = "coded_tools/nttd/state/claims.md"
-                open_questions      = "coded_tools/nttd/state/open_questions.md"
-                champion            = "coded_tools/nttd/state/champion.json"
+                playbook_common     = "coded_tools/state/playbook_common.md"
+                playbook_strategist = "coded_tools/state/playbook_strategist.md"
+                playbook_scout      = "coded_tools/state/playbook_scout.md"
+                playbook_builder    = "coded_tools/state/playbook_builder.md"
+                playbook_fleet      = "coded_tools/state/playbook_fleet.md"
+                playbook_care       = "coded_tools/state/playbook_care.md"
+                current_best_plan   = "coded_tools/state/current_best_plan.md"
+                session_plan        = "coded_tools/state/session_plan.md"
+                claims              = "coded_tools/state/claims.md"
+                open_questions      = "coded_tools/state/open_questions.md"
+                champion            = "coded_tools/state/champion.json"
             }
         }
     }
@@ -328,7 +328,7 @@ than against its final figures.
                 }
             }
         }
-        class = "coded_tools.nttd.scratchpad.Scratchpad"
+        class = "coded_tools.scratchpad.Scratchpad"
         # Bound per network so the planner cannot read or clobber the watcher's note.
         args = { pad = "planner" }
     }
@@ -339,6 +339,6 @@ than against its final figures.
 Close the session: snapshot the playbooks, the commons and the compiled plan, refresh the
 champion, and report what the next session inherits. Call this LAST.
 """ }
-        class = "coded_tools.nttd.advance_session.AdvanceSession"
+        class = "coded_tools.advance_session.AdvanceSession"
     }
 ]

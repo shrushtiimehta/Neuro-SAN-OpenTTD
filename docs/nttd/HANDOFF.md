@@ -26,7 +26,7 @@ cd nttd && uv sync && uv run python -m scripts.verify_environment && cd ..
 cd nttd-workbench && uv sync --extra neuro-san && cd ..
 # add ANTHROPIC_API_KEY to .env  (and to nttd-workbench/.env, already written)
 
-./apps/nttd/run_all.sh --tier t1 --mode air
+./apps/run_all.sh --tier t1 --mode air
 ```
 
 Expect it to fail the first time. The likely candidates, in order: `AGENT_MANIFEST_FILE` unset so
@@ -98,7 +98,7 @@ value and item 3 on the outstanding list.
    see table, and the refusal ledger already accumulates in `sly_data`. The point is to compute the
    signature deterministically rather than hope a model spots it — same principle as the gates.
 2. **Smoke test** — needs the Mac.
-3. **Tests for `coded_tools/nttd/`**.
+3. **Tests for `coded_tools/`**.
 
 ---
 

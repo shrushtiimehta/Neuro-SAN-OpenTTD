@@ -1,7 +1,7 @@
 # Shared by every nttd network: player, watcher and planner.
 #
 # What lives here is the plumbing and the caps. What does NOT live here is strategy: that is in
-# coded_tools/nttd/config_files/seed_playbook.md, which is a file the agents READ rather than a
+# coded_tools/config_files/seed_playbook.md, which is a file the agents READ rather than a
 # prompt they are given, so that a confirmed trial can edit it between sessions.
 
 # ---------------------------------------------------------------------------------------------
@@ -13,7 +13,7 @@
 # token accounting, so a run that hit the default reported no spend at all. This is the backstop
 # for a turn that stops making progress; the real bound on a player turn is its game-day budget.
 #
-# THE CLIENT MUST WAIT LONGER THAN THIS. apps/nttd/runner.py sets its stream timeout above this
+# THE CLIENT MUST WAIT LONGER THAN THIS. apps/runner.py sets its stream timeout above this
 # number: a client that gives up before the server is allowed to finish kills runs that were
 # going to complete.
 max_execution_seconds = 6000

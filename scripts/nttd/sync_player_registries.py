@@ -78,7 +78,7 @@ HEADER = """# GENERATED from nttd-workbench/agents/neuro_san/registries/{src}
 #   1. It names its tools FLAT -- `class = "ns.read_situation.ReadSituation"` -- because the
 #      workbench sets AGENT_TOOL_PATH_ONLY=true, which loads coded tools as siblings with the
 #      package directory itself on the path. This studio does not set that flag, so its own tools
-#      resolve as ordinary fully-qualified imports (`coded_tools.nttd.*`). One server cannot do
+#      resolve as ordinary fully-qualified imports (`coded_tools.*`). One server cannot do
 #      both, so the class references are rewritten to the fully-qualified spelling.
 #
 #   2. Its `include` is written relative to the workbench root, so it resolves to the wrong place
@@ -113,13 +113,13 @@ KNOWLEDGE = """
                 required = ["name"]
             }}
         }}
-        class = "coded_tools.nttd.state_read.StateRead"
+        class = "coded_tools.state_read.StateRead"
         args = {{
             name_map = {{
-                playbook_common     = "coded_tools/nttd/state/playbook_common.md"
+                playbook_common     = "coded_tools/state/playbook_common.md"
 {maps}
-                session_plan        = "coded_tools/nttd/state/session_plan.md"
-                current_best_plan   = "coded_tools/nttd/state/current_best_plan.md"
+                session_plan        = "coded_tools/state/session_plan.md"
+                current_best_plan   = "coded_tools/state/current_best_plan.md"
             }}
         }}
     }}
@@ -136,7 +136,7 @@ KNOWLEDGE = """
                 }}
             }}
         }}
-        class = "coded_tools.nttd.read_claims.ReadClaims"
+        class = "coded_tools.read_claims.ReadClaims"
         # `with_evidence` deliberately NOT bound. A player told what would falsify its instruction
         # starts optimising for the criterion instead of playing the game.
     }}
@@ -150,7 +150,7 @@ KNOWLEDGE = """
                 properties = {{ note = {{ type = "string", description = "Omit to read and clear; give text to replace the pad." }} }}
             }}
         }}
-        class = "coded_tools.nttd.scratchpad.Scratchpad"
+        class = "coded_tools.scratchpad.Scratchpad"
         args = {{ pad = "player" }}
     }}
 ]
@@ -183,6 +183,7 @@ def _wire_knowledge_tools(body: str) -> tuple[str, int]:
 
 
 def generate(mode: str, src_name: str) -> tuple[pathlib.Path, int]:
+    """Write one player registry from its workbench source. Returns the path and class count."""
     body = (SRC / src_name).read_text()
 
     body = re.sub(r'^include "agents/neuro_san/registries/ns_common\.hocon"\n', "", body)
@@ -200,7 +201,7 @@ def generate(mode: str, src_name: str) -> tuple[pathlib.Path, int]:
     stripped = body.rstrip()
     if not stripped.endswith("]"):
         raise SystemExit(f"{src_name}: expected the file to end with its tools array")
-    maps = "\n".join(f'                {name:<19} = "coded_tools/nttd/state/{name}.md"' for name in PLAYBOOKS)
+    maps = "\n".join(f'                {name:<19} = "coded_tools/state/{name}.md"' for name in PLAYBOOKS)
     body = stripped[:-1].rstrip() + "\n" + KNOWLEDGE.format(names=", ".join(PLAYBOOKS), maps=maps)
 
     out = OUT / f"nttd_{mode}_player.hocon"
@@ -209,6 +210,7 @@ def generate(mode: str, src_name: str) -> tuple[pathlib.Path, int]:
 
 
 def main() -> int:
+    """Regenerate both player registries from the workbench."""
     if not SRC.is_dir():
         print(f"nttd-workbench registries not found at {SRC}", file=sys.stderr)
         print("Clone it beside this studio, or set the path in this script.", file=sys.stderr)

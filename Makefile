@@ -1,5 +1,5 @@
 .PHONY: help venv install activate venv-guard lint lint-tests format format-tests
-SOURCES := apps coded_tools middleware neuro_san_studio
+SOURCES := apps coded_tools neuro_san_studio scripts
 TESTS   := tests
 .DEFAULT_GOAL := help
 

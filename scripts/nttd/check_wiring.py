@@ -62,7 +62,7 @@ def _written_state_files() -> set[str]:
     Derived from the source rather than listed here, so this check cannot drift away from the
     thing it is checking.
     """
-    src = (ROOT / "coded_tools" / "nttd" / "paths.py").read_text()
+    src = (ROOT / "coded_tools" / "paths.py").read_text(encoding="utf-8")
     names = set(re.findall(r'os\.path\.join\(STATE_DIR, "([^"]+)"\)', src))
     sections = re.search(r"SECTIONS: Final = \(([^)]*)\)", src)
     for section in re.findall(r'"(\w+)"', sections.group(1) if sections else ""):
@@ -73,7 +73,13 @@ def _written_state_files() -> set[str]:
     return names
 
 
-def main() -> int:  # noqa: PLR0912, PLR0915 - a linear checklist reads better than helpers here
+def main() -> int:  # noqa: PLR0912, PLR0915
+    # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel
+    """Parse every nttd registry, import every class it names, and check the wiring holds.
+
+    A linear checklist on purpose: each block is one property being asserted, and the value
+    is in reading them in order. Split into helpers it becomes a list of names to chase.
+    """
     os.chdir(ROOT)
     sys.path[:0] = [str(ROOT), str(WORKBENCH)]
     _stub_neuro_san()
@@ -93,8 +99,8 @@ def main() -> int:  # noqa: PLR0912, PLR0915 - a linear checklist reads better t
     parsed: dict[str, object] = {}
     for path in registries:
         try:
-            parsed[path] = ConfigFactory.parse_string(pathlib.Path(path).read_text(), basedir=".")
-        except Exception as failure:  # noqa: BLE001 - any parse failure is the same problem
+            parsed[path] = ConfigFactory.parse_string(pathlib.Path(path).read_text(encoding="utf-8"), basedir=".")
+        except Exception as failure:  # noqa: BLE001  # pylint: disable=broad-exception-caught
             problems.append(f"{path}: will not parse — {type(failure).__name__}: {failure}")
 
     classes = 0
@@ -110,7 +116,7 @@ def main() -> int:  # noqa: PLR0912, PLR0915 - a linear checklist reads better t
                 module, _, name = reference.rpartition(".")
                 try:
                     getattr(importlib.import_module(module), name)
-                except Exception as failure:  # noqa: BLE001
+                except Exception as failure:  # noqa: BLE001  # pylint: disable=broad-exception-caught
                     problems.append(f"{path}: class {reference} will not import — {type(failure).__name__}: {failure}")
 
             for logical, target in ((tool.get("args", None) or {}).get("name_map", None) or {}).items():
@@ -151,20 +157,20 @@ def main() -> int:  # noqa: PLR0912, PLR0915 - a linear checklist reads better t
     # intended and says so only in its log.
     manifest = pathlib.Path("registries/manifest.hocon")
     if manifest.is_file():
-        for name, enabled in re.findall(r'"([^"]+\.hocon)"\s*:\s*(true|false)', manifest.read_text()):
+        for name, enabled in re.findall(r'"([^"]+\.hocon)"\s*:\s*(true|false)', manifest.read_text(encoding="utf-8")):
             if enabled == "true" and not (manifest.parent / name).is_file():
                 problems.append(f"manifest names {name}, which is not present")
 
     # Generated files carry a marker. A hand edit to one is work that the next sync destroys.
     for path in registries:
-        body = pathlib.Path(path).read_text()
+        body = pathlib.Path(path).read_text(encoding="utf-8")
         if "# GENERATED from" in body and "Do not edit by hand" not in body:
             problems.append(f"{path}: looks generated but lacks its warning header")
 
     # Nothing may reference a module the migrations removed.
     gone = ("trial_parsing", "log_trial", "active_trials", "resolve_trials", "delete_trial", "promote_trial")
-    for path in glob.glob("coded_tools/nttd/**/*.py", recursive=True) + registries:
-        body = pathlib.Path(path).read_text()
+    for path in glob.glob("coded_tools/**/*.py", recursive=True) + registries:
+        body = pathlib.Path(path).read_text(encoding="utf-8")
         for name in gone:
             if re.search(rf"\b{name}\b", body) and "no longer exists" not in body:
                 problems.append(f"{path}: references '{name}', which was removed")
