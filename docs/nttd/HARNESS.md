@@ -42,13 +42,13 @@ Same shape as `Neuro-SAN-MAPs`, with one difference forced by the target: MAPs h
 | `write_session_plan.py` | the short plan every turn reads |
 | `config_files/seed_playbook_*.md` | six playbooks, every line cited |
 
-### `registries/nttd/`
+### `registries/`
 
 `nttd_common.hocon` (caps, models, sly_data allow-lists), `nttd_planner.hocon`,
 `nttd_watcher.hocon`, `manifest.hocon`. Wired by the root `.env`:
 
 ```bash
-AGENT_MANIFEST_FILE=registries/nttd/manifest.hocon
+AGENT_MANIFEST_FILE=registries/manifest.hocon
 AGENT_TOOL_PATH=coded_tools
 ```
 

@@ -25,7 +25,11 @@ from typing import Any
 from leaf_common.serialization.util.text_file_reader import TextFileReader
 from neuro_san.interfaces.coded_tool import CodedTool
 
-from coded_tools.agent_network_editor.sly_data_lock import SlyDataLock
+from neuro_san_studio.coded_tools.file_management.sly_data_lock import SlyDataLock
+
+# Moved here from coded_tools/agent_network_editor/ when the agent network designer was
+# removed. It is a generic asyncio lock over sly_data with nothing designer-specific in it,
+# and this is now its only consumer.
 
 MAX_CHARS: int = 20_000
 MAX_FILE_BYTES: int = 10 * 1024 * 1024  # 10 MB hard cap on files read into memory

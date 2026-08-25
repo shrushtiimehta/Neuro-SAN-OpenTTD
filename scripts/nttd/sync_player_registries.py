@@ -19,7 +19,7 @@ The `include`. The workbench's is written relative to its own root and resolves 
 from here, so it is dropped and ours is substituted.
 
 The variable names. `ns_llm_config` and friends become the `nttd_` equivalents in
-`registries/nttd/nttd_common.hocon`.
+`registries/nttd_common.hocon`.
 
 **What it adds.** The knowledge layer: `read_playbook`, `read_claims`, `scratchpad`. Read-only —
 a player never records a verdict, because a verdict needs the whole run in view and a turn has only
@@ -43,10 +43,24 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SRC = ROOT / "nttd-workbench" / "agents" / "neuro_san" / "registries"
-OUT = ROOT / "registries" / "nttd"
+OUT = ROOT / "registries"
 
 # The workbench networks we generate a player from, and the mode each plays.
 NETWORKS = {"air": "ns_air_agent.hocon", "rail": "ns_rail_agent.hocon"}
+
+# Wiring the added tools into the agents that use them.
+#
+# neuro-san validates REACHABILITY: a tool declared in the top-level array but named by no agent's
+# own `tools` list makes the whole registry invalid, and the server skips it. Declaring the
+# knowledge tools without wiring them is exactly that failure, and it presents as "only the
+# planner and the watcher loaded" — which looks like the PYTHONPATH trap and is not.
+#
+# `read_playbook` goes to EVERY agent because each has a playbook of its own; the scout's rules
+# are not the fleet's. `read_claims` and `scratchpad` go only to the front man: judging what past
+# sessions established is strategist work, and the pad is bound to one pad name per network, so
+# five agents sharing it would clobber each other's note.
+LEAD_TOOLS = ('"read_playbook"', '"read_claims"', '"scratchpad"')
+WORKER_TOOLS = ('"read_playbook"',)
 
 # The playbooks a player may read. Its own five jobs plus the shared ground.
 PLAYBOOKS = ("playbook_strategist", "playbook_scout", "playbook_builder", "playbook_fleet", "playbook_care")
@@ -75,7 +89,7 @@ HEADER = """# GENERATED from nttd-workbench/agents/neuro_san/registries/{src}
 # can read its playbook, the claims and the session plan, which is the point of the harness -- a
 # network that cannot read what past sessions learned cannot benefit from it.
 
-include "registries/nttd/nttd_common.hocon"
+include "registries/nttd_common.hocon"
 
 """
 
@@ -143,6 +157,31 @@ KNOWLEDGE = """
 """
 
 
+def _wire_knowledge_tools(body: str) -> tuple[str, int]:
+    """Name the knowledge tools in each agent's own `tools` list, so they are reachable.
+
+    Keyed on indentation: the registry's top-level `tools` array sits at column 0 and every
+    agent's sits indented, so requiring leading whitespace touches the agents and nothing else.
+    The first indented array is the front man, which is the one that also gets the claims and
+    the pad.
+    """
+    seen = 0
+
+    def wire(match: re.Match) -> str:
+        nonlocal seen
+        seen += 1
+        indent, inner = match.group("indent"), match.group("inner")
+        add = LEAD_TOOLS if seen == 1 else WORKER_TOOLS
+        add = tuple(name for name in add if name not in inner)
+        if not add:
+            return match.group(0)
+        if "\n" in inner:  # multi-line list: keep it multi-line
+            return f"{indent}tools = [{inner.rstrip()}\n{indent}    {', '.join(add)},\n{indent}]"
+        return f"{indent}tools = [{inner.strip()}, {', '.join(add)}]"
+
+    return re.sub(r"^(?P<indent>[ ]+)tools = \[(?P<inner>.*?)\]", wire, body, flags=re.S | re.M), seen
+
+
 def generate(mode: str, src_name: str) -> tuple[pathlib.Path, int]:
     body = (SRC / src_name).read_text()
 
@@ -153,6 +192,10 @@ def generate(mode: str, src_name: str) -> tuple[pathlib.Path, int]:
     body = body.replace("${ns_worker_conduct}", "${nttd_worker_conduct}")
     body = body.replace('llm_config = { "model_name": "claude-opus" }', "llm_config = ${nttd_llm_config_strong}")
     body = re.sub(r'class = "(ns|ns_air_agent|ns_rail_agent)\.', r'class = "agents.neuro_san.coded_tools.\1.', body)
+
+    body, wired = _wire_knowledge_tools(body)
+    if wired < 2:
+        raise SystemExit(f"{src_name}: found only {wired} agent tools arrays; the layout changed")
 
     stripped = body.rstrip()
     if not stripped.endswith("]"):

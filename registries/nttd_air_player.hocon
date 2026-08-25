@@ -22,7 +22,7 @@
 # can read its playbook, the claims and the session plan, which is the point of the harness -- a
 # network that cannot read what past sessions learned cannot benefit from it.
 
-include "registries/nttd/nttd_common.hocon"
+include "registries/nttd_common.hocon"
 
 
 llm_config = ${nttd_llm_config}
@@ -88,6 +88,7 @@ turns until the session ends.
             "read_situation", "fleet_report", "route_report",
             "inspect", "refusals", "set_loan_to", "commit_plan", "advance_days",
             "note_decision",
+            "read_playbook", "read_claims", "scratchpad",
         ]
     }
 
@@ -118,7 +119,7 @@ short hops.
 Report the best few corridors by their corridor_id, with the towns, the distance, and whether
 both ends take big aeroplanes. The smaller field decides what may fly.
 """ ${nttd_worker_conduct}
-        tools = ["survey_airport_sites", "rank_corridors", "inspect"]
+        tools = ["survey_airport_sites", "rank_corridors", "inspect", "read_playbook"]
     }
 
     {
@@ -144,7 +145,7 @@ airport tile, and records the route. It also checks the airport attached to the 
 intended: a metropolitan field 29 tiles from its town, feeding a 348 person village instead, cost
 one run 55 rating points.
 """ ${nttd_worker_conduct}
-        tools = ["plan_build_corridor", "confirm_airports", "inspect"]
+        tools = ["plan_build_corridor", "confirm_airports", "inspect", "read_playbook"]
     }
 
     {
@@ -173,7 +174,7 @@ arrives stopped, so it still needs starting.
 
 A big aeroplane at a commuter field crashes, with no warning and no refusal.
 """ ${nttd_worker_conduct}
-        tools = ["choose_aircraft", "plan_buy_aircraft", "plan_dispatch", "plan_clone_aircraft"]
+        tools = ["choose_aircraft", "plan_buy_aircraft", "plan_dispatch", "plan_clone_aircraft", "read_playbook"]
     }
 
     {
@@ -203,7 +204,7 @@ LATER turn once it has arrived: the two cannot be done in one step.
 
 Never repair a vehicle onto a route it does not fly.
 """ ${nttd_worker_conduct}
-        tools = ["air_health_check", "plan_repoint", "plan_retire", "fleet_report", "inspect"]
+        tools = ["air_health_check", "plan_repoint", "plan_retire", "fleet_report", "inspect", "read_playbook"]
     }
 
     # =========================================================================================

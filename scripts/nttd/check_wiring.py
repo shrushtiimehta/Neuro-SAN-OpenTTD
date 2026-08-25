@@ -82,9 +82,9 @@ def main() -> int:  # noqa: PLR0912, PLR0915 - a linear checklist reads better t
 
     problems: list[str] = []
     written = _written_state_files()
-    registries = sorted(glob.glob("registries/nttd/*.hocon"))
+    registries = sorted(glob.glob("registries/nttd*.hocon"))
     if not registries:
-        print("no registries found under registries/nttd/")
+        print("no nttd registries found in registries/")
         return 1
 
     print(f"state/ files the harness writes: {len(written)}")
@@ -121,9 +121,35 @@ def main() -> int:  # noqa: PLR0912, PLR0915 - a linear checklist reads better t
                         "advertises as valid."
                     )
 
+    # REACHABILITY. neuro-san rejects a whole registry when a tool is declared in the top-level
+    # array but named by no agent's own `tools` list. This check exists because that happened:
+    # the sync script added the three knowledge tools and wired none of them, both players were
+    # skipped at load, and this script still said "wiring is sound" — because a class that
+    # imports and a name_map that resolves are not the same thing as a tool anyone can call.
+    #
+    # It presents as "only the planner and the watcher loaded", which is indistinguishable at a
+    # glance from the PYTHONPATH trap, and sends you looking in the wrong place.
+    for path, config in parsed.items():
+        tools = config.get("tools", None) or []
+        declared = {t["name"] for t in tools if t.get("name", None)}
+        if not declared:
+            continue
+        # The front man is whichever agent nothing else names: every other node hangs off it.
+        referenced: set[str] = set()
+        for tool in tools:
+            referenced.update(str(name) for name in (tool.get("tools", None) or []))
+        entry = [t["name"] for t in tools if not t.get("class", None) and t["name"] not in referenced]
+        unreachable = sorted(declared - referenced - set(entry))
+        if unreachable:
+            problems.append(
+                f"{path}: declared but named by no agent's tools list: {unreachable}. "
+                "neuro-san treats this as a validation error and skips the ENTIRE registry, "
+                "so the network silently does not load."
+            )
+
     # The manifest must name only files that exist, or the server loads fewer networks than
     # intended and says so only in its log.
-    manifest = pathlib.Path("registries/nttd/manifest.hocon")
+    manifest = pathlib.Path("registries/manifest.hocon")
     if manifest.is_file():
         for name, enabled in re.findall(r'"([^"]+\.hocon)"\s*:\s*(true|false)', manifest.read_text()):
             if enabled == "true" and not (manifest.parent / name).is_file():

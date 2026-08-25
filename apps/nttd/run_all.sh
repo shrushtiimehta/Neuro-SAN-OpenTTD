@@ -70,7 +70,7 @@ NETWORK="nttd_${MODE}_player"
 # workbench checkout. BOTH are needed: the player registries reference the workbench's game tools
 # in place rather than copying them, so a fix there is a fix here.
 export PYTHONPATH="$STUDIO:$WORKBENCH${PYTHONPATH:+:$PYTHONPATH}"
-export AGENT_MANIFEST_FILE="${AGENT_MANIFEST_FILE:-registries/nttd/manifest.hocon}"
+export AGENT_MANIFEST_FILE="${AGENT_MANIFEST_FILE:-registries/manifest.hocon}"
 export AGENT_TOOL_PATH="${AGENT_TOOL_PATH:-coded_tools}"
 export NTTD_API_URL="${NTTD_API_URL:-http://127.0.0.1:8000}"
 export NEURO_SAN_SERVER_HTTP_PORT="${NEURO_SAN_SERVER_HTTP_PORT:-8085}"

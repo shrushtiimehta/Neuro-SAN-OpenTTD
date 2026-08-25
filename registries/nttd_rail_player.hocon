@@ -22,7 +22,7 @@
 # can read its playbook, the claims and the session plan, which is the point of the harness -- a
 # network that cannot read what past sessions learned cannot benefit from it.
 
-include "registries/nttd/nttd_common.hocon"
+include "registries/nttd_common.hocon"
 
 
 llm_config = ${nttd_llm_config}
@@ -90,6 +90,7 @@ session ends.
             "read_situation", "fleet_report", "route_report",
             "inspect", "refusals", "set_loan_to", "commit_plan", "advance_days",
             "note_decision",
+            "read_playbook", "read_claims", "scratchpad",
         ]
     }
 
@@ -126,7 +127,7 @@ distance is what built three separate stations that no train could enter.
 rank_corridors orders what it found. Report the best few by pair_id, with the cargo, the
 distance, and what the far end accepts.
 """ ${nttd_worker_conduct}
-        tools = ["choose_rail_type", "survey_rail_pairs", "rank_corridors", "inspect"]
+        tools = ["choose_rail_type", "survey_rail_pairs", "rank_corridors", "inspect", "read_playbook"]
     }
 
     {
@@ -162,7 +163,7 @@ built inside it cannot leave.
 
 Only when confirm_rail_route lists a corridor under ready_for_a_train is it a route.
 """ ${nttd_worker_conduct}
-        tools = ["plan_build_corridor", "confirm_rail_route", "plan_add_depot", "inspect"]
+        tools = ["plan_build_corridor", "confirm_rail_route", "plan_add_depot", "inspect", "read_playbook"]
     }
 
     {
@@ -194,7 +195,7 @@ plan_dispatch gives it the two station orders and starts it. Leave the order fla
 station only starts producing once a vehicle has visited it, so a train told to wait for a full
 load sits in an empty station forever and the route never starts.
 """ ${nttd_worker_conduct}
-        tools = ["choose_train", "plan_buy_train", "plan_dispatch", "inspect"]
+        tools = ["choose_train", "plan_buy_train", "plan_dispatch", "inspect", "read_playbook"]
     }
 
     {
@@ -232,7 +233,7 @@ the two cannot be done in one step. It will refuse if no corridor has a depot jo
 line, and that refusal is right: a train sent to a depot it cannot reach never arrives, and the
 sale never becomes possible.
 """ ${nttd_worker_conduct}
-        tools = ["rail_health_check", "plan_repoint", "plan_retire", "fleet_report", "inspect"]
+        tools = ["rail_health_check", "plan_repoint", "plan_retire", "fleet_report", "inspect", "read_playbook"]
     }
 
     # =========================================================================================

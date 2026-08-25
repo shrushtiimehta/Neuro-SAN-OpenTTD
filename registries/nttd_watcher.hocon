@@ -1,4 +1,4 @@
-include "registries/nttd/nttd_common.hocon"
+include "registries/nttd_common.hocon"
 
 llm_config = ${nttd_llm_config}
 allow = ${nttd_allow_none}
