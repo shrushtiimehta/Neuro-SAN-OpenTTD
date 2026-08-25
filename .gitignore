@@ -214,3 +214,14 @@ registries/manifest.hocon.test
 # commit them. See docs/nttd/HARNESS.md.
 /nttd/
 /nttd-workbench/
+
+# Runtime state. Most of state/ is DERIVED — the working playbooks are reset from
+# coded_tools/config_files/ on a fresh start, and the scratchpads, session plan and counter are
+# session-local. Committing them makes every run a diff.
+#
+# claims.md and champion.json are the exceptions and stay tracked: the ledger is the accumulated
+# record of what sessions established, which is the entire point of the harness and cannot be
+# regenerated from anything.
+/state/*
+!/state/claims.md
+!/state/champion.json
