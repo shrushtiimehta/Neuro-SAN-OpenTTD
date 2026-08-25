@@ -13,8 +13,13 @@
 #   2. `nttd benchmark` creates a session, draws its world, starts OpenTTD on it, prints the
 #                       SESSION ID and PARTICIPANT TOKEN, then waits for the end condition. It
 #                       does not play.
-#   3. `ns run`         the neuro-san server on :8080, serving the four nttd networks, plus NSFlow
-#                       on :4173 where every tool call and its arguments are visible live.
+#   3. `ns run`         the neuro-san server on :8085, serving the four nttd networks, plus NSFlow
+#                       on :4175 where every tool call and its arguments are visible live.
+#
+# PORTS are deliberately 8085 and 4175, not the studio's usual 8080 and 4173. Those two are
+# commonly already held — by another studio, a dev server, anything — and a port collision
+# surfaces as a server that half-starts, which reads like a config error and is not one.
+# Exported below rather than only set in .env, so they hold even with no .env present.
 #   4. the runner       plays it, step by step, in the foreground.
 #
 # Steps 2 and 4 are the pair that has to agree: the runner needs the id and token that benchmark
@@ -68,7 +73,9 @@ export PYTHONPATH="$STUDIO:$WORKBENCH${PYTHONPATH:+:$PYTHONPATH}"
 export AGENT_MANIFEST_FILE="${AGENT_MANIFEST_FILE:-registries/nttd/manifest.hocon}"
 export AGENT_TOOL_PATH="${AGENT_TOOL_PATH:-coded_tools}"
 export NTTD_API_URL="${NTTD_API_URL:-http://127.0.0.1:8000}"
-NS_PORT="${NEURO_SAN_SERVER_HTTP_PORT:-8080}"
+export NEURO_SAN_SERVER_HTTP_PORT="${NEURO_SAN_SERVER_HTTP_PORT:-8085}"
+export NSFLOW_PORT="${NSFLOW_PORT:-4175}"
+NS_PORT="$NEURO_SAN_SERVER_HTTP_PORT"
 
 echo "studio      $STUDIO"
 echo "engine      $NTTD_DIR"
@@ -76,6 +83,7 @@ echo "game tools  $WORKBENCH (referenced in place)"
 echo "scenario    $CONF"
 echo "network     $NETWORK"
 echo "sessions    $SESSIONS"
+echo "agents      :$NS_PORT   nsflow :$NSFLOW_PORT   engine $NTTD_API_URL"
 echo
 
 PIDS=()

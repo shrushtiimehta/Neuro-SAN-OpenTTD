@@ -569,7 +569,7 @@ def main() -> int:
     parser.add_argument("--planner", default="nttd_planner")
     parser.add_argument("--watcher", default="nttd_watcher")
     parser.add_argument("--host", default=os.environ.get("NEURO_SAN_SERVER_HOST", "localhost"))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("NEURO_SAN_SERVER_HTTP_PORT", "8080")))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("NEURO_SAN_SERVER_HTTP_PORT", "8085")))
     parser.add_argument("--scenario", default="", help="Scenario name, recorded in telemetry")
     # A backstop, not a schedule. The run ends when the world does; this only stops a loop that
     # would otherwise spin forever against a network that has stopped making progress.
