@@ -25,12 +25,12 @@ from langchain_core.tools import BaseTool
 from neuro_san.interfaces.coded_tool import CodedTool
 from neuro_san.internals.run_context.langchain.mcp.langchain_mcp_adapter import LangChainMcpAdapter
 from neuro_san.internals.run_context.langchain.mcp.mcp_servers_info_restorer import McpServersInfoRestorer
+from neuro_san_studio import mcp as _mcp_pkg
 
 from coded_tools.agent_network_editor.and_logger import AndLogger
 from coded_tools.agent_network_editor.mcp_header_hygiene import McpHeaderHygiene
 from coded_tools.agent_network_editor.mcp_servers_load import McpServersLoad
 from coded_tools.agent_network_editor.shared_process_cache import SharedProcessCache
-from neuro_san_studio import mcp as _mcp_pkg
 
 # Path to the mcp_info.hocon shipped inside the neuro_san_studio package.
 # Resolved via the imported package's __file__ so it works both in-repo and

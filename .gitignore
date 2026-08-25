@@ -207,3 +207,10 @@ memory/
 
 # test local only
 registries/manifest.hocon.test
+
+# The nttd engine and the workbench game layer are external checkouts, cloned in place rather
+# than vendored: the player registries reference the workbench's Python directly, and the engine
+# wraps an OpenTTD server. Both are upstream repos with their own history — clone them, don't
+# commit them. See docs/nttd/HARNESS.md.
+/nttd/
+/nttd-workbench/

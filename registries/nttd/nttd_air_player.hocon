@@ -1,0 +1,552 @@
+# GENERATED from nttd-workbench/agents/neuro_san/registries/ns_air_agent.hocon
+#
+# Regenerate with: python3 scripts/nttd/sync_player_registries.py
+# Do not edit by hand: the next sync overwrites it. Change the workbench network instead.
+#
+# WHY THIS IS GENERATED RATHER THAN INCLUDING THE WORKBENCH FILE DIRECTLY.
+#
+# Two things make the workbench registry unusable verbatim from this tree, and both are about
+# loading rather than about content:
+#
+#   1. It names its tools FLAT -- `class = "ns.read_situation.ReadSituation"` -- because the
+#      workbench sets AGENT_TOOL_PATH_ONLY=true, which loads coded tools as siblings with the
+#      package directory itself on the path. This studio does not set that flag, so its own tools
+#      resolve as ordinary fully-qualified imports (`coded_tools.nttd.*`). One server cannot do
+#      both, so the class references are rewritten to the fully-qualified spelling.
+#
+#   2. Its `include` is written relative to the workbench root, so it resolves to the wrong place
+#      from here.
+#
+# NO GAME-LAYER PYTHON IS DUPLICATED. Every `class` below points at the workbench module in place,
+# so a fix there is a fix here. The only thing this file ADDS is the knowledge layer: the player
+# can read its playbook, the claims and the session plan, which is the point of the harness -- a
+# network that cannot read what past sessions learned cannot benefit from it.
+
+include "registries/nttd/nttd_common.hocon"
+
+
+llm_config = ${nttd_llm_config}
+allow = ${nttd_allow}
+
+metadata {
+    description = "Plays one nttd session as an air transport company. Aircraft need nothing built between their endpoints, which removes the class of failure that stops rail and water, at the cost of expensive airports and aeroplanes."
+    tags = ["nttd", "air"]
+    sample_queries = [
+        "Take the next decision in this session."
+        "Nothing is being delivered. What is wrong?"
+        "Where should the next corridor go?"
+    ]
+}
+
+# No AAOSA. Its protocol asks every down-chain agent who is responsible, which is for routing
+# between agents of unknown capability. Here the four workers have fixed, known jobs, so the
+# strategist calls the one it needs and the protocol's extra model calls buy nothing.
+tools = [
+
+    # =========================================================================================
+    # The strategist. The front man deliberately: neuro-san preserves only the front man's
+    # history across turns, so any other agent starts each turn with amnesia. Strategy is the
+    # one job that cannot afford that.
+    # =========================================================================================
+    {
+        name = "AirCompany"
+        function {
+            description = """
+Plays one turn of an nttd session as an air transport company: works out what matters now,
+does it, and lets the world run.
+"""
+        }
+        # A stronger model, and only here. The workers score sites and format tables; the
+        # trade-offs live at this level.
+        llm_config = ${nttd_llm_config_strong}
+        instructions = """
+You run one air transport company for a whole session, and you play it to the end.
+
+A session is as long as it is: the shipped ones run from one game year to ten. Never assume a
+length. read_situation reports how many days this run has and how many are left, and every plan
+is measured against those rather than against a remembered calendar.
+
+Every turn, in this order:
+1. read_situation. What is built, what is earning, how many days remain, and the engine's own
+   list of problems.
+2. If something is broken, hand it to FleetCare before building anything new. A vehicle that is
+   not earning is money already spent, and repairing it beats replacing it.
+3. Otherwise grow: Scout for where, Builder to build it, FleetGrowth to fly it.
+4. commit_plan once, when everything for this turn is staged. One commit, one game day.
+5. advance_days, so the world can show you whether it worked. How long to wait belongs to the
+   route rather than the calendar: an aircraft cannot be judged until it has had time to fly its
+   leg out and back, and the tools work that window out from the leg and the aircraft's speed.
+
+Use note_decision when you commit to something, and say why. A turn that cannot remember its own
+plan re-invents one.
+
+Stop buying when the tools say too few days remain for a vehicle to pay for itself. Keep taking
+turns until the session ends.
+""" ${nttd_ground_rules}
+        tools = [
+            "Scout", "Builder", "FleetGrowth", "FleetCare",
+            "read_situation", "fleet_report", "route_report",
+            "inspect", "refusals", "set_loan_to", "commit_plan", "advance_days",
+            "note_decision",
+        ]
+    }
+
+    # =========================================================================================
+    # Workers. Each owns one part of the job and the failures that part is prone to.
+    # =========================================================================================
+    {
+        name = "Scout"
+        function {
+            description = "Finds where the next corridor should go, ranked and already checked for viability."
+            parameters = {
+                type = "object"
+                properties = {
+                    inquiry = { type = "string", description = "What the strategist wants to know" }
+                }
+                required = ["inquiry"]
+            }
+        }
+        instructions = """
+You find corridors worth flying.
+
+survey_airport_sites first: it returns only towns whose airport would actually cover them, with
+the largest field that fits. Then rank_corridors, which pairs them and ranks by population
+against distance. Air revenue rises with distance, which is the opposite sign to road, so the
+ranking favours a long leg rather than penalising it and you should not second-guess it towards
+short hops.
+
+Report the best few corridors by their corridor_id, with the towns, the distance, and whether
+both ends take big aeroplanes. The smaller field decides what may fly.
+""" ${nttd_worker_conduct}
+        tools = ["survey_airport_sites", "rank_corridors", "inspect"]
+    }
+
+    {
+        name = "Builder"
+        function {
+            description = "Builds a chosen corridor and confirms what actually landed."
+            parameters = {
+                type = "object"
+                properties = {
+                    inquiry = { type = "string", description = "Which corridor to build, by corridor_id" }
+                }
+                required = ["inquiry"]
+            }
+        }
+        instructions = """
+You build corridors.
+
+plan_build_corridor stages both airports so they cost ONE game day together rather than one each.
+It does not build: the strategist commits.
+
+After a commit, confirm_airports. It resolves each hangar tile, which cannot be derived from the
+airport tile, and records the route. It also checks the airport attached to the town that was
+intended: a metropolitan field 29 tiles from its town, feeding a 348 person village instead, cost
+one run 55 rating points.
+""" ${nttd_worker_conduct}
+        tools = ["plan_build_corridor", "confirm_airports", "inspect"]
+    }
+
+    {
+        name = "FleetGrowth"
+        function {
+            description = "Adds aeroplanes to a route and gets them flying."
+            parameters = {
+                type = "object"
+                properties = {
+                    inquiry = { type = "string", description = "How many aircraft, and for which route" }
+                }
+                required = ["inquiry"]
+            }
+        }
+        instructions = """
+You add aeroplanes.
+
+choose_aircraft reads what the game will actually sell and what the route's smaller airport can
+take. Never name an engine yourself: a run once submitted the same purchase 35 times with invented
+ids, every one refused.
+
+plan_buy_aircraft stages the purchases; plan_dispatch stages the orders and starts. They are
+separate commits because a vehicle id only exists once its purchase has been committed.
+plan_clone_aircraft is cheaper when a route already flies: a clone copies the orders, but it
+arrives stopped, so it still needs starting.
+
+A big aeroplane at a commuter field crashes, with no warning and no refusal.
+""" ${nttd_worker_conduct}
+        tools = ["choose_aircraft", "plan_buy_aircraft", "plan_dispatch", "plan_clone_aircraft"]
+    }
+
+    {
+        name = "FleetCare"
+        function {
+            description = "Keeps the fleet earning: diagnoses what is stuck and repairs it."
+            parameters = {
+                type = "object"
+                properties = {
+                    inquiry = { type = "string", description = "What appears to be wrong" }
+                }
+                required = ["inquiry"]
+            }
+        }
+        instructions = """
+You keep the fleet earning.
+
+air_health_check judges each aircraft on how long it has been in its state, not on the state
+itself: loading at a gate and sitting in a hangar are both normal, and treating them as faults
+once made a healthy fleet read as a wall of problems. No aircraft is called stuck until it has had
+time to fly its route out and back, a window the check works out from the leg and the aircraft's
+speed, so a long corridor gets a longer grace than a short one and neither gets a fixed day number.
+
+plan_repoint clears a vehicle's orders before re-issuing them, because appending left one aircraft
+with four zig-zagging orders. plan_retire sends a hopeless vehicle to a depot, and sells it on a
+LATER turn once it has arrived: the two cannot be done in one step.
+
+Never repair a vehicle onto a route it does not fly.
+""" ${nttd_worker_conduct}
+        tools = ["air_health_check", "plan_repoint", "plan_retire", "fleet_report", "inspect"]
+    }
+
+    # =========================================================================================
+    # Coded tools. Every invariant that cost a run lives in one of these rather than in prose,
+    # because a rule in a prompt is advice and a rule in Python is enforced.
+    # =========================================================================================
+
+    # ---- reading, all free: none of these costs a game day ----------------------------------
+    {
+        name = "read_situation"
+        function = { description = """
+Where the company stands: the date, days remaining, money, the loan against the 250,000 above
+which the rating scores nothing for it, what is built, cargo delivered, and the engine's own
+problems list word for word. Call this FIRST every turn; the other reports read what it caches.
+""" }
+        class = "agents.neuro_san.coded_tools.ns.read_situation.ReadSituation"
+    }
+    {
+        name = "fleet_report"
+        function = { description = """
+Every vehicle with its profit, age, speed, orders and the route it actually flies, worst earner
+first. Also names any vehicle that has vanished since the last look, which is how a crash is
+noticed: nothing else announces one.
+""" }
+        class = "agents.neuro_san.coded_tools.ns.fleet_report.FleetReport"
+    }
+    {
+        name = "route_report"
+        function = { description = """
+Per route: its towns, cargo waiting at each end, vehicles serving it and what they earn. The
+verdict line says whether it wants another vehicle or whether the money belongs in a new corridor.
+""" }
+        class = "agents.neuro_san.coded_tools.ns.route_report.RouteReport"
+    }
+    {
+        name = "inspect"
+        function = {
+            description = "The full record for one station, vehicle or town, when a decision turns on a detail the reports leave out."
+            parameters = {
+                type = "object"
+                properties = {
+                    what = { type = "string", description = "station, vehicle or town" }
+                    which = { type = "string", description = "A name exactly as a report printed it, or a numeric id" }
+                }
+                required = ["what", "which"]
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns.inspect_entity.Inspect"
+    }
+    {
+        name = "refusals"
+        function = { description = """
+What the game has refused, grouped with a count. Read it before repeating anything: one run
+submitted the same purchase 35 times because nothing carried the refusal forward.
+""" }
+        class = "agents.neuro_san.coded_tools.ns.refusals.Refusals"
+    }
+
+    # ---- the only tools that cost game days -------------------------------------------------
+    {
+        name = "commit_plan"
+        function = { description = """
+Submits everything staged this turn as ONE batch, for one game day. Checks it first: anything
+already refused is dropped, wrong parameters are reported rather than sent, and a batch that
+cannot be afforded is refused. Returns what the game said about each action.
+""" }
+        class = "agents.neuro_san.coded_tools.ns.commit_plan.CommitPlan"
+    }
+    {
+        name = "advance_days"
+        function = {
+            description = """
+Lets the world run and reports what changed: cargo delivered, money, rating, and how many
+vehicles are moving. Roughly 10 days to see an aircraft leave its hangar, 30 to see a route earn,
+90 to see whether it pays.
+"""
+            parameters = {
+                type = "object"
+                properties = {
+                    days = { type = "integer", description = "Game days to let pass, up to 120" }
+                }
+                required = ["days"]
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns.advance_days.AdvanceDays"
+    }
+    {
+        name = "set_loan_to"
+        function = {
+            description = """
+Sets the company loan. A company opens with 100,000 and one air corridor costs several times
+that, so borrowing is how a run reaches revenue at all. Above 250,000 the rating's loan component
+scores nothing, so borrow against something you are about to build.
+"""
+            parameters = {
+                type = "object"
+                properties = {
+                    amount = { type = "integer", description = "The loan to hold" }
+                }
+                required = ["amount"]
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns.set_loan_to.SetLoanTo"
+    }
+
+    # ---- memory ----------------------------------------------------------------------------
+    {
+        name = "note_decision"
+        function = {
+            description = """
+Records what was decided and why, so a later turn can tell whether it worked. Returns recent
+decisions and flags any whose review is due.
+"""
+            parameters = {
+                type = "object"
+                properties = {
+                    decision = { type = "string", description = "What was decided" }
+                    because = { type = "string", description = "The evidence it rests on" }
+                    review_in_days = { type = "integer", description = "When to check it worked" }
+                }
+                required = ["decision", "because"]
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns.note_decision.NoteDecision"
+    }
+
+    # ---- air: siting -----------------------------------------------------------------------
+    {
+        name = "survey_airport_sites"
+        function = {
+            description = """
+Towns worth an airport, with the largest field that still covers them. Only returns sites INSIDE
+their airport's coverage: one sited 29 tiles from its town fed a village instead and cost 55
+rating points. Surveyed once per session, because towns do not move.
+"""
+            parameters = {
+                type = "object"
+                properties = { limit = { type = "integer", description = "How many sites to return" } }
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.survey_airport_sites.SurveyAirportSites"
+    }
+    {
+        name = "rank_corridors"
+        function = {
+            description = """
+Candidate corridors between surveyed sites, ranked by population against distance, each with a
+corridor_id to name it by. Says whether both ends take big aeroplanes, because the smaller field
+decides what may fly.
+"""
+            parameters = {
+                type = "object"
+                properties = { limit = { type = "integer", description = "How many corridors to return" } }
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.rank_corridors.RankCorridors"
+    }
+    {
+        name = "plan_build_corridor"
+        function = {
+            description = "Stages both airports for a corridor, batched so they cost one game day together."
+            parameters = {
+                type = "object"
+                properties = { corridor_id = { type = "string", description = "From rank_corridors" } }
+                required = ["corridor_id"]
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.plan_build_corridor.PlanBuildCorridor"
+    }
+    {
+        name = "confirm_airports"
+        function = { description = """
+Run after committing a build. Resolves each hangar tile, records the route, and checks the airport
+attached to the town that was intended rather than a neighbour.
+""" }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.confirm_airports.ConfirmAirports"
+    }
+
+    # ---- air: fleet ------------------------------------------------------------------------
+    {
+        name = "choose_aircraft"
+        function = {
+            description = """
+The aeroplanes the game will actually sell that this route's smaller airport can take, best first.
+Never name an engine yourself; this reads the real list.
+"""
+            parameters = {
+                type = "object"
+                properties = { corridor_id = { type = "string", description = "Which route, or omit for the newest" } }
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.choose_aircraft.ChooseAircraft"
+    }
+    {
+        name = "plan_buy_aircraft"
+        function = {
+            description = """
+Stages aircraft purchases for a route, batched into one game day. Resolves the engine and the
+hangar itself, and refuses to buy when too few days remain for a vehicle to pay for itself.
+"""
+            parameters = {
+                type = "object"
+                properties = {
+                    count = { type = "integer", description = "How many to buy, 1 to 4" }
+                    town = { type = "string", description = "A town of the route to add to, or omit for the newest" }
+                }
+                required = ["count"]
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.plan_buy_aircraft.PlanBuyAircraft"
+    }
+    {
+        name = "plan_dispatch"
+        function = {
+            description = """
+Stages orders and starts for aircraft that have none, grouping each by the route whose hangar it
+is parked at so none is sent to the wrong corridor. A whole fleet is dispatched in one game day.
+"""
+            parameters = {
+                type = "object"
+                properties = { town = { type = "string", description = "Limit to one route, or omit for all" } }
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.plan_dispatch.PlanDispatch"
+    }
+    {
+        name = "plan_clone_aircraft"
+        function = {
+            description = """
+Clones an aeroplane already flying a route, which copies its orders and saves the dispatch. A
+clone arrives stopped, so a start is staged with it.
+"""
+            parameters = {
+                type = "object"
+                properties = {
+                    count = { type = "integer", description = "How many clones" }
+                    town = { type = "string", description = "A town of the route to clone on" }
+                }
+                required = ["count"]
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.plan_clone_aircraft.PlanCloneAircraft"
+    }
+
+    # ---- air: care -------------------------------------------------------------------------
+    {
+        name = "air_health_check"
+        function = { description = """
+A verdict per aeroplane: healthy, watch, or stuck, with the reason. Judges on how long a vehicle
+has been in its state, not on the state itself, because loading at a gate is normal.
+""" }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.air_health_check.AirHealthCheck"
+    }
+    {
+        name = "plan_repoint"
+        function = {
+            description = """
+Stages a repair for a stuck aeroplane: clears its orders before re-issuing them for the route it
+actually flies, then starts it.
+"""
+            parameters = {
+                type = "object"
+                properties = { vehicle_id = { type = "integer", description = "From air_health_check, or omit for all stuck" } }
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.plan_repoint.PlanRepoint"
+    }
+    {
+        name = "plan_retire"
+        function = {
+            description = """
+Sends a hopeless aeroplane to a depot, and sells it on a later turn once it has arrived. The two
+cannot be done in one step. Recovering the capital beats paying to keep something that never moved.
+"""
+            parameters = {
+                type = "object"
+                properties = { vehicle_id = { type = "integer", description = "From air_health_check, or omit for all hopeless" } }
+            }
+        }
+        class = "agents.neuro_san.coded_tools.ns_air_agent.plan_retire.PlanRetire"
+    }
+
+    # =========================================================================================
+    # The knowledge layer. Added here; not present in the workbench network.
+    #
+    # READ-ONLY, deliberately. A player reads what past sessions established and never records a
+    # verdict on it: judging needs the whole run in view, and a turn has only the position in
+    # front of it. Recording is the planner's job at a session boundary.
+    # =========================================================================================
+    {
+        name = "read_playbook"
+        function = {
+            description = "The strategy for one job, including every rule promoted by an earlier session. Read your own before deciding anything, and the session plan before your first move."
+            parameters = {
+                type = "object"
+                properties = {
+                    name = { type = "string", description = "One of: playbook_common, playbook_strategist, playbook_scout, playbook_builder, playbook_fleet, playbook_care, session_plan, current_best_plan." }
+                }
+                required = ["name"]
+            }
+        }
+        class = "coded_tools.nttd.state_read.StateRead"
+        args = {
+            name_map = {
+                playbook_common     = "coded_tools/nttd/state/playbook_common.md"
+                playbook_strategist = "coded_tools/nttd/state/playbook_strategist.md"
+                playbook_scout      = "coded_tools/nttd/state/playbook_scout.md"
+                playbook_builder    = "coded_tools/nttd/state/playbook_builder.md"
+                playbook_fleet      = "coded_tools/nttd/state/playbook_fleet.md"
+                playbook_care       = "coded_tools/nttd/state/playbook_care.md"
+                session_plan        = "coded_tools/nttd/state/session_plan.md"
+                current_best_plan   = "coded_tools/nttd/state/current_best_plan.md"
+            }
+        }
+    }
+
+    {
+        name = "read_claims"
+        function = {
+            description = "What past sessions established, with the conditions each held under. Anything flagged re_test_before_relying was established elsewhere: it tells you where to look, not what to conclude."
+            parameters = {
+                type = "object"
+                properties = {
+                    domain = { type = "string", description = "Optional: one job only -- common, strategist, scout, builder, fleet or care." }
+                    conditions_now = { type = "string", description = "The scenario and mode being played." }
+                }
+            }
+        }
+        class = "coded_tools.nttd.read_claims.ReadClaims"
+        # `with_evidence` deliberately NOT bound. A player told what would falsify its instruction
+        # starts optimising for the criterion instead of playing the game.
+    }
+
+    {
+        name = "scratchpad"
+        function = {
+            description = "Leave a note for the next turn, or read and clear the one you left. Reading deletes it, so a note is visible exactly once and never rots into stale advice."
+            parameters = {
+                type = "object"
+                properties = { note = { type = "string", description = "Omit to read and clear; give text to replace the pad." } }
+            }
+        }
+        class = "coded_tools.nttd.scratchpad.Scratchpad"
+        args = { pad = "player" }
+    }
+]

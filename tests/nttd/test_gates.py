@@ -1,0 +1,250 @@
+"""The gates in `coded_tools/nttd/`, exercised.
+
+The knowledge layer's whole value is that a model cannot write a confident wrong verdict into
+the commons. That is enforced in code, not in prompts — so it is worth exactly one test file.
+
+Every path in `paths.py` is RELATIVE (`coded_tools/nttd/state`), so `chdir` into a tmp dir is
+all the isolation these need. No fixtures, no mocks, no monkeypatching of module constants.
+"""
+
+# Each test's name is its sentence — a docstring here would only restate it.
+# pylint: disable=missing-function-docstring
+
+from __future__ import annotations
+
+import pathlib
+import shutil
+
+import pytest
+
+from coded_tools.nttd import claims
+from coded_tools.nttd import paths
+from coded_tools.nttd import seed_playbooks
+from coded_tools.nttd.log_claim import LogClaim
+from coded_tools.nttd.promote_claim import PromoteClaim
+from coded_tools.nttd.read_claims import ReadClaims
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _in_tmp_state(tmp_path, monkeypatch):
+    """Point the whole knowledge layer at a throwaway tree.
+
+    The seeds are copied in because `prepare(fresh=True)` reads them from CONFIG_DIR, which is
+    relative like everything else — without them seeding warns and leaves the playbooks empty.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / paths.STATE_DIR).mkdir(parents=True, exist_ok=True)
+    (tmp_path / paths.LOG_DIR).mkdir(parents=True, exist_ok=True)
+    shutil.copytree(REPO_ROOT / paths.CONFIG_DIR, tmp_path / paths.CONFIG_DIR)
+
+
+def _refused(reply) -> bool:
+    """A gate refusal arrives as an ERROR string from some tools and a dict from others."""
+    if isinstance(reply, str):
+        return reply.startswith("ERROR:")
+    return bool(
+        reply.get("refused")
+        or reply.get("problems")
+        or reply.get("status") == "refused"
+        or str(reply.get("action_taken", "")).startswith("skipped_")
+    )
+
+
+def _log(**over):
+    """A claim write that passes every gate, unless a test breaks one on purpose."""
+    args = {
+        "domain": "scout",
+        "claim": "Coastal sites out-earn inland ones on t1.",
+        "status": "supported",
+        "confidence": "low",
+        "conditions": "t1, air, 256 flat, seed 1001",
+        "evidence": "two coastal pairs beat every inland pair",
+        "session_number": 1,
+    }
+    args.update(over)
+    return LogClaim().invoke(args, {})
+
+
+# --- Gate 1: a refutation must exhibit the condition being dismissed ------------------------
+
+
+def test_refuted_without_despite_is_downgraded_not_written_as_refuted():
+    reply = _log(status="refuted", re_test_when="a coastal pair is tried with a depot in range")
+    assert reply.get("recorded_as") == "open", reply
+    assert reply.get("the_gates_changed_this"), "a silent downgrade is the failure this prevents"
+    assert claims.current()[reply["id"]].status == "open"
+
+
+def test_downgraded_refutation_leaves_the_question_behind():
+    _log(status="refuted", re_test_when="a coastal pair is tried with a depot in range")
+    with open(paths.OPEN_QUESTIONS_PATH, encoding="utf-8") as handle:
+        assert handle.read().strip(), "Gate 1 must record what it refused to let you conclude"
+
+
+def test_refuted_with_despite_survives():
+    reply = _log(
+        status="refuted",
+        refuted_despite="depot in range and cargo waiting, still zero income over 12 months",
+        re_test_when="a larger aircraft is available",
+    )
+    assert reply.get("recorded_as") == "refuted", reply
+
+
+# --- Gate 2: confidence is bought with varied conditions ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "asked, varied, expected",
+    [
+        ("high", [], "low"),
+        ("high", ["seed"], "med"),
+        ("high", ["seed", "map size"], "high"),
+        ("med", [], "low"),
+        ("med", ["seed"], "med"),
+    ],
+)
+def test_confidence_is_capped_by_how_much_was_varied(asked, varied, expected):
+    reply = _log(
+        confidence=asked,
+        varied=varied,
+        re_test_when="tier changes",  # required once anything lands at low
+    )
+    assert reply.get("confidence") == expected, reply
+
+
+# --- Gate 3: inherited conditions that differ get flagged -----------------------------------
+
+
+def test_claim_from_other_conditions_is_flagged_for_retest():
+    _log(confidence="med", varied=["seed"], conditions="t1, air, 256 flat, seed 1001")
+    reply = ReadClaims().invoke({"conditions_now": "t4, rail, 512 hilly, seed 2001"}, {})
+    flagged = [c for c in reply["claims"] if c.get("re_test_before_relying")]
+    assert flagged, "a claim established elsewhere must not be handed over as settled"
+
+
+def test_matching_conditions_are_not_flagged():
+    _log(confidence="med", varied=["seed"], conditions="t1, air, 256 flat, seed 1001")
+    reply = ReadClaims().invoke({"conditions_now": "t1, air, 256 flat, seed 1001"}, {})
+    assert not any(c.get("re_test_before_relying") for c in reply["claims"])
+
+
+# --- Gate 4: what is still open comes back as worth probing ---------------------------------
+
+
+def test_open_and_low_confidence_claims_resurface():
+    _log(status="open", confidence="low", re_test_when="a depot is in range")
+    reply = ReadClaims().invoke({}, {})
+    assert reply.get("worth_probing"), "an untested idea nobody resurfaces is an idea lost"
+
+
+# --- wording: a finding may not be frozen into policy ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Rail is always better than air on hilly maps.",
+        "Never build across water.",
+        "The inland corridor is dead.",
+        "Coastal sites earn more, so stop testing inland ones.",
+    ],
+)
+def test_policy_phrasing_is_refused(text):
+    reply = _log(claim=text)
+    assert _refused(reply), f"accepted policy phrasing: {text!r}"
+
+
+def test_retest_trigger_is_mandatory_on_a_weak_claim():
+    reply = _log(confidence="low", re_test_when="")
+    assert _refused(reply), "a low claim with no way back is policy"
+
+
+# --- the ledger is append-only --------------------------------------------------------------
+
+
+def test_conflicting_revisions_both_survive_and_latest_wins():
+    first = _log(confidence="med", varied=["seed"])
+    claim_id = first["id"]
+    _log(
+        id=claim_id,
+        status="refuted",
+        refuted_despite="tried coastal with depot in range, no income",
+        re_test_when="a larger aircraft is available",
+        session_number=2,
+    )
+    revisions = claims.fold(claims.read_all())[claim_id]
+    assert len(revisions) == 2, "a status change must append, never overwrite"
+    assert {r.status for r in revisions} == {"supported", "refuted"}
+    assert claims.current()[claim_id].status == "refuted", "the fold takes the latest"
+
+
+# --- playbooks are append-only ---------------------------------------------------------------
+
+
+def test_replace_line_is_refused():
+    seed_playbooks.prepare(fresh=True)
+    reply = PromoteClaim().invoke(
+        {"domain": "scout", "edit_type": "replace_line", "new_text": "anything", "session_number": 1},
+        {},
+    )
+    assert str(reply).startswith("ERROR:") and "replace_line" in str(reply), reply
+
+
+def test_the_handwritten_baseline_cannot_be_removed():
+    seed_playbooks.prepare(fresh=True)
+    with open(paths.playbook("scout"), encoding="utf-8") as handle:
+        body = handle.read()
+    # The playbooks are prose, not bullet lists. Take the longest hand-authored line so
+    # `find_text` is unambiguous — a short one matches several lines and the promoter refuses it
+    # as ambiguous before the learned-tag guard is ever reached.
+    baseline = max(
+        (
+            line.strip()
+            for line in body.split(paths.LEARNED_HEADER)[0].splitlines()
+            if len(line.strip()) > 40 and not line.startswith("#") and not paths.is_learned(line)
+        ),
+        key=len,
+    )
+    assert body.count(baseline) == 1
+    reply = PromoteClaim().invoke({"domain": "scout", "edit_type": "remove_line", "find_text": baseline}, {})
+    assert _refused(reply), f"only (learned sN) lines are demotable, got: {reply!r}"
+    with open(paths.playbook("scout"), encoding="utf-8") as handle:
+        assert baseline in handle.read(), "the baseline survived the attempt"
+
+
+# --- promotion lands where the reader will look ---------------------------------------------
+
+
+def test_a_promoted_rule_lands_under_the_learned_heading_and_is_tagged():
+    seed_playbooks.prepare(fresh=True)
+    rule = "Coastal pairs beat inland on t1 when a depot is in range."
+    PromoteClaim().invoke({"domain": "scout", "edit_type": "add_line", "new_text": rule, "session_number": 7}, {})
+    with open(paths.playbook("scout"), encoding="utf-8") as handle:
+        body = handle.read()
+    tail = body.rpartition(paths.LEARNED_HEADER)[2]
+    assert rule in tail, "a promoted rule must land under the learned heading, not in the baseline"
+    assert paths.is_learned(tail[tail.index(rule) :]), "and must carry its (learned sN) tag"
+
+
+@pytest.mark.parametrize("section", list(paths.SECTIONS))
+def test_every_seed_has_exactly_one_learned_heading(section):
+    """Five seeds once shipped a second, dangling `### Learned rules — <section>` heading.
+
+    Harmless to the promoter, which anchors on the exact bare line — but a model reading its
+    playbook saw two identically-named sections, one permanently empty.
+    """
+    with open(REPO_ROOT / paths.seed(section), encoding="utf-8") as handle:
+        headings = [ln for ln in handle.read().splitlines() if ln.startswith(paths.LEARNED_HEADER)]
+    assert headings == [paths.LEARNED_HEADER], headings
+
+
+@pytest.mark.parametrize("section", list(paths.SECTIONS))
+def test_promotion_works_for_every_section(section):
+    """A seed whose anchor does not resolve fails as `section_missing`, silently, at run time."""
+    seed_playbooks.prepare(fresh=True)
+    rule = f"A rule for {section}."
+    PromoteClaim().invoke({"domain": section, "edit_type": "add_line", "new_text": rule, "session_number": 3}, {})
+    with open(paths.playbook(section), encoding="utf-8") as handle:
+        assert rule in handle.read().rpartition(paths.LEARNED_HEADER)[2]

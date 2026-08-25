@@ -1,0 +1,143 @@
+# Shared by every nttd network: player, watcher and planner.
+#
+# What lives here is the plumbing and the caps. What does NOT live here is strategy: that is in
+# coded_tools/nttd/config_files/seed_playbook.md, which is a file the agents READ rather than a
+# prompt they are given, so that a confirmed trial can edit it between sessions.
+
+# ---------------------------------------------------------------------------------------------
+# How long a turn may take, and what happens when part of it fails.
+
+# How long ONE TURN may run before the server cancels it.
+#
+# neuro-san's default is 300 seconds, and a cancelled turn loses everything in it including its
+# token accounting, so a run that hit the default reported no spend at all. This is the backstop
+# for a turn that stops making progress; the real bound on a player turn is its game-day budget.
+#
+# THE CLIENT MUST WAIT LONGER THAN THIS. apps/nttd/runner.py sets its stream timeout above this
+# number: a client that gives up before the server is allowed to finish kills runs that were
+# going to complete.
+max_execution_seconds = 6000
+
+# One turn is one request carrying the conversation forward, so this is what stops the context
+# growing without limit across a long session, and what keeps per-turn cost flat.
+max_message_history = 40
+
+# How many times an agent run is re-attempted on a RETRYABLE failure: provider rate limits,
+# provider timeouts. Raised from the default of 3 because a session is hours long and a single
+# unlucky 429 in the middle of it otherwise costs the whole run. Bounded by
+# max_execution_seconds above, which is what stops this becoming an unbounded retry loop.
+max_attempts = 5
+
+# The LangGraph super-step limit for a turn. Headroom rather than a fix for anything measured:
+# a player turn is bounded by its day budget, so this should never be reached, and hitting it
+# costs the entire turn.
+max_steps = 40000
+
+# NOT SET, deliberately: request_timeout_seconds. It defaults to 0, meaning no timeout, and it is
+# a SERVER-side cap on one client chat request. Setting it would abort exactly the long turns
+# max_execution_seconds exists to allow.
+
+# ---------------------------------------------------------------------------------------------
+# Models.
+#
+# The judgement here is about trade-offs rather than recall: which of three viable corridors
+# pays, whether to expand or consolidate, which problem matters now. A front man overrides this
+# to a stronger model; the workers do not need one.
+nttd_llm_config = {
+    "model_name": "claude-sonnet"
+}
+
+nttd_llm_config_strong = {
+    "model_name": "claude-opus"
+}
+
+# ---------------------------------------------------------------------------------------------
+# The sly_data allow-list, and why nothing works without it.
+#
+# neuro-san's SlyDataRedactor is security-by-default: with nothing listed, NOTHING in sly_data
+# returns to the client, so every scrap of cross-turn state dies at the turn boundary. That is
+# not a theory. It is what made an earlier network unable to correct itself and submit one
+# refused purchase 35 times.
+#
+# Listed EXPLICITLY rather than `true`. Two things must never cross: the credentials, which would
+# put a participant token in a chat payload, and anything holding a live object such as an
+# asyncio lock, which cannot be serialised at all.
+#
+# The knowledge layer needs none of this — the watcher and the planner read FILES, not the game,
+# and hold no credentials whatsoever. That is deliberate: a network that cannot address the game
+# cannot accidentally spend a game day while thinking about one.
+nttd_allow = {
+    to_upstream = {
+        sly_data = [
+            "plan"             # actions staged and not yet committed
+            "routes"           # corridors that exist, with their stations and depot
+            "refusals"         # what the game refused, so it is not asked twice
+            "sites"            # the surveyed map, computed once because towns do not move
+            "decisions"        # what the strategist chose and why
+            "turns"            # how many turns have been taken
+            "fleet_seen"       # last known vehicle ids, which is how a crash is noticed
+            "days_this_turn"   # days already spent this turn, which is what bounds a turn
+            "turn_stamp"       # which turn those days belong to, stamped by the runner
+            "turn_stamp_seen"  # the stamp as the clock tool last saw it
+        ]
+    }
+}
+
+# The knowledge networks return nothing across the boundary at all: everything they produce is a
+# file on disk, which is the point — a playbook edit has to outlive the request that made it.
+nttd_allow_none = {
+    to_upstream = {
+        sly_data = []
+    }
+}
+
+# ---------------------------------------------------------------------------------------------
+# How a curator should behave. Shared by the watcher and the planner, because the failure they
+# both have to avoid is the same one: a confident verdict nobody can check.
+nttd_curator_conduct = """
+You are judging a benchmark run, not playing it. You never take a game action and you hold no
+session credentials; everything you know comes from the telemetry and the files.
+
+Three rules:
+
+1. EVERY claim carries a figure. "Cargo improved" is not a finding. "Cargo delivered reached
+   4,100 by day 200 against the best session's 3,050 at the same day" is one. A verdict a later
+   session cannot check teaches it nothing, and the tools will refuse a note too short to hold
+   evidence.
+2. Compare at the SAME game day, never against a finished session's final numbers. A run 90 days
+   in is not behind a completed one; it is 90 days in.
+3. Say "I do not know" when the telemetry does not support a verdict. `inconclusive` and
+   `not_applied` exist precisely so that an untested hypothesis is not retired as a failed one.
+"""
+
+# ---------------------------------------------------------------------------------------------
+# The rules that hold in every mode, and how a worker should answer.
+#
+# Ported VERBATIM from nttd-workbench/agents/neuro_san/registries/ns_common.hocon, not reworded.
+# Each of these cost a measured run to learn, and a paraphrase is a chance to lose the part that
+# mattered. Kept here rather than in a playbook because a playbook is read by a tool call and
+# these have to be in the prompt itself: they are the rules that decide whether a turn is worth
+# anything at all.
+nttd_ground_rules = """
+Four things are true whatever is being moved:
+
+1. A build action returning success is NOT a working route. Nothing buys a vehicle until a tool
+   has confirmed a vehicle can actually get from one end to the other.
+2. A station outside its own catchment earns nothing, however well sited it looks.
+3. A transport company is judged on what it moves. Cargo delivered matters more than anything
+   else you can point at, so a decision that carries more freight beats one that looks tidier.
+4. Planning is free. Only committing a plan and letting time pass cost game days, and a batch has
+   no ceiling, so build a whole corridor in one commit rather than one action at a time.
+
+Never invent an identifier. Engine ids, coordinates, tiles and station ids all come from tools.
+If a tool refuses, read the reason: it is written for you, and repeating the call gets the same
+answer.
+"""
+
+nttd_worker_conduct = """
+You are called by the company's strategist, not by a person. Answer with what you did and what
+it means for the decision at hand, in a few lines. Do not restate the whole world back.
+
+If a tool returns an Error, say what it said and what you would need in order to proceed. Do not
+retry the same call unchanged.
+"""

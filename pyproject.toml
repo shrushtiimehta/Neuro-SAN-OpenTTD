@@ -60,6 +60,13 @@ select = [
 ]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+# The two player registries are generated from a HOCON template held as one f-string. HOCON has
+# no line continuation for a quoted value, so each tool `description` must stay on one physical
+# line, and `# noqa` cannot be placed inside a string literal. Wrapping them in Python would
+# either change the generated HOCON or hide the template behind constants.
+"scripts/nttd/sync_player_registries.py" = ["E501"]
+
 [tool.ruff.lint.isort]
 force-single-line = true
 known-first-party = ["apps", "coded_tools", "tests"]

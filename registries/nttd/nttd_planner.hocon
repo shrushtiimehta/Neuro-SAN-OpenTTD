@@ -1,0 +1,344 @@
+include "registries/nttd/nttd_common.hocon"
+
+llm_config = ${nttd_llm_config_strong}
+allow = ${nttd_allow_none}
+
+metadata {
+    description = "Opens and closes an nttd session. At the start it reads the commons, compiles the working plan and raises the claims this session will test; at the end it revises those claims against what the telemetry actually shows and promotes what held up."
+    tags = ["nttd", "learning", "curator"]
+    sample_queries = [
+        "Open session 4. Plan it against the best session so far."
+        "Close session 4. Revise the claims and promote what held up."
+    ]
+}
+
+# No AAOSA. Its protocol asks every down-chain agent who is responsible, which is for routing
+# between agents of unknown capability. Here there is one agent with one job, so the protocol's
+# extra model calls buy nothing.
+tools = [
+
+    # =========================================================================================
+    # The curator. One agent, deliberately: opening and closing a session are the same act of
+    # judgement pointed in two directions, and splitting them would mean two agents disagreeing
+    # about what the last session showed.
+    # =========================================================================================
+    {
+        name = "Curator"
+        function {
+            description = """
+Runs a session boundary. Called twice per session: once to open it with a plan and a set of
+claims to test, once to close it by revising those claims against the evidence.
+"""
+            parameters = {
+                type = "object"
+                properties = {
+                    inquiry = {
+                        type = "string"
+                        description = "Which boundary this is — opening or closing — and the session number."
+                    }
+                }
+                required = ["inquiry"]
+            }
+        }
+        instructions = """
+You are the curator of a long-running experiment, and you are good at this job. Each session is
+one attempt at the nttd benchmark. Your edge over a single clever agent is a body of knowledge
+that outlives any one session and gets MORE RELIABLE as it is retested — and building that is
+genuinely satisfying work, because you can watch it compound.
+
+Be warm and direct with your teammates. Say what went well and name the person's work when it
+did: "the corridor thesis paid off — cargo 34% past the champion" is worth writing, and a run
+that failed usefully is still progress worth acknowledging. Encouragement about DIRECTION and
+EFFORT costs nothing and helps.
+
+**But never let that warmth reach a verdict.** Confidence is a separate axis from tone, and a
+curator who is upbeat about its own conclusions is exactly how a team gets locked onto a
+confident-but-wrong belief. Be generous about the attempt; be strict about what is established.
+The tools enforce the strict half whatever you write, so there is no advantage in stretching.
+
+You are called at two moments, and they are different jobs.
+
+## OPENING a session
+
+1. `run_telemetry` — every finished session, the best one, and how the last compared. If nothing
+   has finished, this is the first run: say so plainly and plan from the playbooks alone.
+2. `read_claims`, passing `conditions_now` — the scenario, mode and session about to be played.
+   **This is Gate 3 and it matters.** Anything flagged `re_test_before_relying` was established
+   somewhere else; inherited knowledge tells you where to LOOK, not what to conclude. Do not
+   inherit a verdict whose conditions differ from yours.
+3. `state_read` for the playbooks you may change, and for `current_best_plan`.
+4. `scratchpad()` — your note from the last close. It is deleted on read.
+5. `write_current_best_plan` — the compiled strategy: what to do, in what order, what to leave
+   alone. Name the claim ids it rests on, and name its **biggest untested upside**, which is the
+   field that stops a plan settling into a local optimum. Its confidence is capped by the claim
+   bearing on that upside; the tool applies the cap and tells you.
+6. `write_session_plan` — the short version every turn of the player network reads.
+7. `log_claim`, two or three times. Each needs CONDITIONS and a claim that is one testable
+   sentence. Raise them at `open` — a claim is not supported before it has been tested.
+
+**Look at `worth_probing` before raising anything new.** Gate 4: if something is already open and
+testing it is affordable, probe THAT rather than adding a fresh question beside it. Spend the
+session's limited actions on the most informative test available, not on breadth.
+
+## CLOSING a session
+
+1. `run_telemetry` and `session_telemetry` — what happened, and against what.
+2. `read_claims` with `conditions_now` — everything in force, with evidence.
+3. `log_claim` with the `id` of each claim the session bears on, to REVISE it. This appends a new
+   revision; the old one stays. Set:
+   - `status: supported` with EVIDENCE carrying figures.
+   - `status: open` when the session did not test it, or the result was unclear. **This is not a
+     failure of the idea** — a null result can equally mean the action never took effect, a
+     precondition was unmet, or you checked under the wrong conditions.
+   - `status: refuted` ONLY with `refuted_despite`: a specific observation where the condition you
+     are dismissing WAS satisfied and the effect still did not occur. Gate 1. Without it the tool
+     files the claim as open and puts the condition in the open questions, which is the honest
+     outcome — a failure while a required condition was unmet is UNTRIED, not refuted.
+   - `confidence` with `varied`: what you actually CHANGED between observations. Gate 2 — five
+     runs with the same condition fixed is one test run five times, and it re-runs any systematic
+     error five times too. `high` needs two varied conditions, `med` needs one.
+   - `re_test_when` — mandatory on anything refuted or low. A negative claim with no trigger to
+     reopen it is not knowledge, it is policy.
+4. `promote_claim` for claims now `supported` — this appends the rule to the relevant playbook so
+   the next session's agents read it. Playbooks are append-only: to supersede a rule, add the
+   better one and leave the old one in place. A supported claim nobody promotes is a lesson
+   recorded and thrown away.
+5. Consider a DEMOTION. If a rule promoted earlier rests on a claim now refuted, remove it with
+   `promote_claim(edit_type='remove_line')`. This is what makes the loop honest: a playbook that
+   only grows is not learning, it is accumulating. The tool refuses to touch the hand-authored
+   baseline, so you cannot do damage by trying.
+6. `write_current_best_plan` — revise the compiled strategy if the evidence moved.
+7. `scratchpad(note=...)` — a line for your next opening.
+8. `advance_session` — LAST. Snapshots everything and refreshes the champion.
+
+## Three things you may never write
+
+- **"always", "never", "dead".** A claim is provisional. Say the conditions it held under.
+- **Anything telling a future agent to stop testing something.** You may down-rank a line of
+  enquiry as low priority, but only WITH a re-test trigger that keeps it open. A wrong verdict
+  frozen into team policy is the single failure this whole process exists to prevent.
+- **A rule baked into a teammate's standing role.** A role says what an agent FOCUSES ON, never
+  what to conclude. Findings live in the commons, where they stay provisional and re-testable.
+
+The tools reject all three. That is deliberate: the check should not depend on you remembering.
+
+## What you are optimising
+
+The board ranks `company_value`, with `total_cargo` breaking a tie. Both come straight from the
+game, and cargo delivered is also 40% of the in-game rating, so the two rarely disagree — where
+they do, say which you are trading against which and why.
+
+Do not recompute the marking scheme. The game reports its own rating and the telemetry carries
+it; recalculating it would duplicate the engine and hand you the answer sheet.
+""" ${nttd_curator_conduct}
+        tools = [
+            "run_telemetry", "session_telemetry", "diagnose", "read_claims", "log_claim",
+            "state_read", "scratchpad", "write_current_best_plan", "write_session_plan",
+            "promote_claim", "advance_session",
+        ]
+    }
+
+    # =========================================================================================
+    # Coded tools. Every one is deterministic: the model decides, the tool performs and enforces.
+    # That split is what makes the learning auditable — a promotion is a file diff with a claim
+    # id attached, and a gate is a branch in Python rather than a line in a prompt.
+    # =========================================================================================
+
+    {
+        name = "run_telemetry"
+        function = { description = """
+Every finished session with its final figures, the best one so far, and how the most recent
+compared. Ranked on company_value with total_cargo breaking a tie, which is what the board ranks
+on. Call this FIRST at both boundaries.
+""" }
+        class = "coded_tools.nttd.telemetry.RunTelemetry"
+    }
+
+    {
+        name = "diagnose"
+        function = { description = """
+The documented failure signatures, checked against this session's telemetry rather than eyeballed:
+company value pinned at the engine's floor, stations built that deliver nothing, a fleet-wide
+stall, and one action being refused over and over. Call it before judging the numbers — every one
+of these produces a run that looks busy from the inside and scores nothing.
+
+It reports what is wrong. It does not say what to do about it: that is a claim to raise and test,
+not an answer this tool is entitled to give.
+""" }
+        class = "coded_tools.nttd.diagnose.Diagnose"
+    }
+
+    {
+        name = "session_telemetry"
+        function = { description = """
+How the current session went, turn by turn: cargo, company value, cash, loan, what is built, and
+the trend over the last few turns. Compares against the best session AT THE SAME GAME DAY rather
+than against its final figures.
+""" }
+        class = "coded_tools.nttd.telemetry.SessionTelemetry"
+    }
+
+    {
+        name = "read_claims"
+        function = {
+            description = "The commons: what is established, what conflicts, and what is worth testing next. Pass conditions_now so claims established elsewhere are flagged for re-test."
+            parameters = {
+                type = "object"
+                properties = {
+                    conditions_now = { type = "string", description = "The scenario, mode and session about to be played or just played. Gate 3 needs it." }
+                    domain = { type = "string", description = "Optional: one playbook domain only — common, strategist, scout, builder, fleet or care." }
+                    status = { type = "string", description = "Optional: open, supported or refuted." }
+                }
+            }
+        }
+        class = "coded_tools.nttd.read_claims.ReadClaims"
+        # The curator sees the evidence. A player agent deliberately does not: an agent told what
+        # would falsify its instruction optimises for the criterion instead of playing.
+        args = { with_evidence = true }
+    }
+
+    {
+        name = "log_claim"
+        function = {
+            description = "Raise a claim, or revise one by passing its id. A revision APPENDS; the earlier one is kept, so nothing is ever silently overwritten. The gates will adjust or refuse the write and tell you which."
+            parameters = {
+                type = "object"
+                properties = {
+                    claim = { type = "string", description = "One testable sentence: a cause->effect, a value, the shape of a relationship, or a coordination convention." }
+                    domain = { type = "string", description = "common, strategist, scout, builder, fleet or care." }
+                    conditions = { type = "string", description = "REQUIRED. The state this held under: when, what was present, who acted." }
+                    status = { type = "string", description = "open, supported or refuted. refuted requires refuted_despite." }
+                    confidence = { type = "string", description = "low, med or high. high needs 2 varied conditions, med needs 1." }
+                    evidence = { type = "string", description = "The specific observations you actually made, with figures." }
+                    varied = { type = "string", description = "What you CHANGED between observations, semicolon-separated. Repeats with a condition held fixed do not count." }
+                    refuted_despite = { type = "string", description = "For refuted only: an observation where the condition you are dismissing WAS satisfied and the effect still did not occur." }
+                    re_test_when = { type = "string", description = "The trigger that reopens this. Mandatory when refuted or low confidence." }
+                    id = { type = "string", description = "Pass an existing claim id to revise it rather than raise a new one." }
+                    note = { type = "string", description = "Anything else a later reader needs." }
+                }
+                required = ["claim", "domain", "conditions"]
+            }
+        }
+        class = "coded_tools.nttd.log_claim.LogClaim"
+        args = { origin = "planner" }
+    }
+
+    {
+        name = "write_current_best_plan"
+        function = {
+            description = "Append a revision of the compiled working strategy. Must name the claim ids it rests on; its confidence is capped by the claim bearing on its biggest untested upside."
+            parameters = {
+                type = "object"
+                properties = {
+                    headline = { type = "string", description = "The one recommendation this plan makes, in a sentence." }
+                    plan = { type = "string", description = "What to do, in what order, and what to leave alone." }
+                    rests_on = { type = "string", description = "The claim ids this rests on, e.g. 's3_1, s4_2'." }
+                    biggest_untested_upside = { type = "string", description = "What this plan is choosing NOT to try, and what it might be worth." }
+                    upside_claim_id = { type = "string", description = "The claim bearing on that upside. It caps this plan's confidence." }
+                    confidence = { type = "string", description = "low, med or high — subject to the cap." }
+                }
+                required = ["headline", "plan", "rests_on"]
+            }
+        }
+        class = "coded_tools.nttd.current_best_plan.WriteCurrentBestPlan"
+    }
+
+    {
+        name = "write_session_plan"
+        function = {
+            description = "Write the short plan every turn of the player network reads. Replaces any earlier plan for this session."
+            parameters = {
+                type = "object"
+                properties = {
+                    plan = { type = "string", description = "What this session will do, in a few lines." }
+                    what_changed_from_last_session = { type = "string", description = "What is different, and why." }
+                    mode = { type = "string", description = "air or rail." }
+                }
+                required = ["plan"]
+            }
+        }
+        class = "coded_tools.nttd.write_session_plan.WriteSessionPlan"
+    }
+
+    {
+        name = "promote_claim"
+        function = {
+            description = "Append a rule to a playbook for a supported claim, or remove a previously-learned line to demote one whose claim is now refuted. Append-only: there is no swap, so a superseded rule is kept alongside its replacement. Never touches the hand-authored baseline."
+            parameters = {
+                type = "object"
+                properties = {
+                    domain = { type = "string", description = "Which playbook to edit: common, strategist, scout, builder, fleet or care." }
+                    edit_type = { type = "string", description = "add_line or remove_line. There is no swap." }
+                    new_text = { type = "string", description = "The rule, for add_line. Name the claim id it comes from." }
+                    find_text = { type = "string", description = "For remove_line: the exact learned line to demote. Must match one line only." }
+                }
+                required = ["domain", "edit_type"]
+            }
+        }
+        class = "coded_tools.nttd.promote_claim.PromoteClaim"
+    }
+
+    {
+        name = "state_read"
+        function = {
+            description = "Read one knowledge file by its logical name."
+            parameters = {
+                type = "object"
+                properties = {
+                    name = {
+                        type = "string"
+                        description = "One of: playbook_common, playbook_strategist, playbook_scout, playbook_builder, playbook_fleet, playbook_care, current_best_plan, session_plan, claims, open_questions, champion."
+                    }
+                    start_line = { type = "integer", description = "Optional 1-based first line." }
+                    end_line = { type = "integer", description = "Optional inclusive last line." }
+                }
+                required = ["name"]
+            }
+        }
+        class = "coded_tools.nttd.state_read.StateRead"
+        # Deny-by-default: the model passes a NAME and never a path, so only what is listed here
+        # is addressable. That closes off typos, invented directories and `..` escapes at once.
+        args = {
+            name_map = {
+                # All six, because the planner is the only thing that promotes and a promotion
+                # can land in any of them.
+                playbook_common     = "coded_tools/nttd/state/playbook_common.md"
+                playbook_strategist = "coded_tools/nttd/state/playbook_strategist.md"
+                playbook_scout      = "coded_tools/nttd/state/playbook_scout.md"
+                playbook_builder    = "coded_tools/nttd/state/playbook_builder.md"
+                playbook_fleet      = "coded_tools/nttd/state/playbook_fleet.md"
+                playbook_care       = "coded_tools/nttd/state/playbook_care.md"
+                current_best_plan   = "coded_tools/nttd/state/current_best_plan.md"
+                session_plan        = "coded_tools/nttd/state/session_plan.md"
+                claims              = "coded_tools/nttd/state/claims.md"
+                open_questions      = "coded_tools/nttd/state/open_questions.md"
+                champion            = "coded_tools/nttd/state/champion.json"
+            }
+        }
+    }
+
+    {
+        name = "scratchpad"
+        function = {
+            description = "Leave a note for your own next run, or read and clear the one you left. Reading deletes it, so a note is visible exactly once."
+            parameters = {
+                type = "object"
+                properties = {
+                    note = { type = "string", description = "Omit to read and clear; give text to replace the pad." }
+                }
+            }
+        }
+        class = "coded_tools.nttd.scratchpad.Scratchpad"
+        # Bound per network so the planner cannot read or clobber the watcher's note.
+        args = { pad = "planner" }
+    }
+
+    {
+        name = "advance_session"
+        function = { description = """
+Close the session: snapshot the playbooks, the commons and the compiled plan, refresh the
+champion, and report what the next session inherits. Call this LAST.
+""" }
+        class = "coded_tools.nttd.advance_session.AdvanceSession"
+    }
+]

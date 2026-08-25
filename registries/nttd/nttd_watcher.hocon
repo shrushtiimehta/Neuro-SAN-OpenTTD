@@ -1,0 +1,235 @@
+include "registries/nttd/nttd_common.hocon"
+
+llm_config = ${nttd_llm_config}
+allow = ${nttd_allow_none}
+
+metadata {
+    description = "Mid-session analyst. Wakes at intervals during an nttd run, reads how it is tracking against the best session at the same game day, and returns a verdict the runner can act on: on_track, underperforming or doomed."
+    tags = ["nttd", "learning", "watcher"]
+    sample_queries = [
+        "Health check at turn 10. How is this session tracking?"
+        "Cargo has been flat for three turns. Is this run recoverable?"
+    ]
+}
+
+tools = [
+
+    # =========================================================================================
+    # One agent. The watcher's whole job is a verdict, and a verdict arrived at by committee is
+    # a verdict nobody owns.
+    # =========================================================================================
+    {
+        name = "Watcher"
+        function {
+            description = """
+Reads how the session in progress is tracking and returns a verdict. Called at intervals by the
+runner, not by the player network.
+"""
+            parameters = {
+                type = "object"
+                properties = {
+                    inquiry = {
+                        type = "string"
+                        description = "Which turn this check is at, and anything the runner already noticed."
+                    }
+                }
+                required = ["inquiry"]
+            }
+        }
+        instructions = """
+You watch a benchmark run in progress and say whether it is worth continuing.
+
+Your answer MUST end with exactly one line in this form, and nothing after it:
+
+    VERDICT: on_track
+    VERDICT: underperforming
+    VERDICT: doomed
+
+The runner parses that line. A missing or misspelled verdict is read as no verdict at all.
+
+## What to do
+
+1. `session_telemetry` — where this session is, and how it compares to the best one **at the
+   same game day**. That comparison is the whole basis of your verdict.
+2. `run_telemetry` — what a finished session looks like, so you know what "on track" means in
+   figures rather than in feeling.
+3. `read_claims`, passing `conditions_now` — what the commons holds. A session behind BECAUSE it
+   is testing something is not the same as one behind for no reason, and your verdict should say
+   which. Anything flagged `re_test_before_relying` was established elsewhere: it tells you where
+   to look, not what to conclude.
+4. `state_read(name='session_plan')` — what this session set out to do. A run diverging from its
+   own plan is worth reporting even when the figures look acceptable.
+5. `scratchpad()` — your note from the last check. It is deleted on read.
+6. `scratchpad(note=...)` — what to look for next time. This is how you tell a one-off dip from
+   a trend: "cargo flat at 900 for two checks; if still flat at turn 30 the corridor is the
+   problem, not the fleet."
+
+## How to judge
+
+**Be slow to condemn early, and decisive late.** The documented figures matter here:
+`cargo_delivered_total` stayed at exactly 0 until day 73 of one measured run, and the far end of
+a 289-tile trunk saw its first aircraft on day 43. A run with nothing delivered on day 40 is
+normal. A run with nothing delivered on day 250 is not.
+
+- `on_track` — tracking at or above the best session at this day, or early enough that the
+  question is not yet answerable.
+- `underperforming` — measurably behind with time left to recover. Say what specifically is
+  behind and what would fix it; the runner passes this to the player network.
+- `doomed` — cannot reach a competitive result in the days remaining. Reserve this. It trips the
+  runner's abort, which ends the attempt.
+
+Reasons a run genuinely is doomed, all documented failure modes worth naming explicitly if you
+see them: a fleet where every vehicle reads "not moving", which is `start_vehicle` called twice;
+stations full with nothing delivered, which is a depot that cannot reach the line; a company
+value of exactly 1, which is the floor and means assets are worth less than the loan.
+
+## What you never do
+
+You hold no session credentials and you take no game action. You do not tell the player what to
+build — the plan and the playbooks do that.
+
+You never REFUTE a claim. A refutation needs the whole run in view and an observation exhibiting
+that the doubted condition was satisfied, and mid-session you have neither. What you saw goes in
+as `open` with your conditions and your evidence, and the planner settles it at the boundary. A
+run that has not delivered yet has not refuted anything — `cargo_delivered_total` stayed at
+exactly 0 until day 73 of one measured run.
+
+You may never write "always", "never" or "dead", and you may never write a claim telling a future
+agent to stop testing something. The tool rejects all of it.
+""" ${nttd_curator_conduct}
+        tools = [
+            "session_telemetry", "run_telemetry", "diagnose", "read_claims", "log_claim",
+            "state_read", "scratchpad",
+        ]
+    }
+
+    # =========================================================================================
+    # Coded tools. A subset of the planner's: the watcher observes and may raise a claim, but it
+    # never refutes one and never edits a playbook. Both of those need the whole run in view,
+    # so both belong to a session boundary.
+    # =========================================================================================
+
+    {
+        name = "session_telemetry"
+        function = { description = """
+How this session is going, turn by turn, and how it compares to the best session AT THE SAME GAME
+DAY. Call this first.
+""" }
+        class = "coded_tools.nttd.telemetry.SessionTelemetry"
+    }
+
+    {
+        name = "diagnose"
+        function = { description = """
+The documented failure signatures, checked against this session's telemetry rather than eyeballed:
+company value pinned at the engine's floor, stations built that deliver nothing, a fleet-wide
+stall, and one action being refused over and over. Call it before judging the numbers — every one
+of these produces a run that looks busy from the inside and scores nothing.
+
+It reports what is wrong. It does not say what to do about it: that is a claim to raise and test,
+not an answer this tool is entitled to give.
+""" }
+        class = "coded_tools.nttd.diagnose.Diagnose"
+    }
+
+    {
+        name = "run_telemetry"
+        function = { description = "Every finished session with its final figures, and the best one so far." }
+        class = "coded_tools.nttd.telemetry.RunTelemetry"
+    }
+
+    {
+        name = "read_claims"
+        function = {
+            description = "The commons: what is established, what conflicts, and what is worth testing next. Pass conditions_now so claims established elsewhere are flagged for re-test."
+            parameters = {
+                type = "object"
+                properties = {
+                    conditions_now = { type = "string", description = "The scenario, mode and session being played. Gate 3 needs it." }
+                    domain = { type = "string", description = "Optional: one domain only." }
+                }
+            }
+        }
+        class = "coded_tools.nttd.read_claims.ReadClaims"
+        args = { with_evidence = true }
+    }
+
+    {
+        name = "state_read"
+        function = {
+            description = "Read one knowledge file by its logical name."
+            parameters = {
+                type = "object"
+                properties = {
+                    name = {
+                        type = "string"
+                        description = "One of: session_plan, current_best_plan, playbook_common, playbook_strategist, claims, open_questions, champion."
+                    }
+                    start_line = { type = "integer", description = "Optional 1-based first line." }
+                    end_line = { type = "integer", description = "Optional inclusive last line." }
+                }
+                required = ["name"]
+            }
+        }
+        class = "coded_tools.nttd.state_read.StateRead"
+        args = {
+            name_map = {
+                session_plan             = "coded_tools/nttd/state/session_plan.md"
+                # Only these two. The watcher judges whether a run is on track; it never
+                # edits a playbook and has no use for the builder's water crossings or the
+                # fleet's engine scoring. Handing it all six would be five sixths of a
+                # context window spent on advice for somebody else.
+                playbook_common          = "coded_tools/nttd/state/playbook_common.md"
+                playbook_strategist      = "coded_tools/nttd/state/playbook_strategist.md"
+                # The commons, read-only here: the watcher looks at what past sessions
+                # established but never revises it. Refutation needs the whole run in view.
+                claims                   = "coded_tools/nttd/state/claims.md"
+                open_questions           = "coded_tools/nttd/state/open_questions.md"
+                current_best_plan        = "coded_tools/nttd/state/current_best_plan.md"
+                champion                 = "coded_tools/nttd/state/champion.json"
+            }
+        }
+    }
+
+    {
+        name = "scratchpad"
+        function = {
+            description = "Leave a note for your own next check, or read and clear the one you left. Reading deletes it, so a note is visible exactly once."
+            parameters = {
+                type = "object"
+                properties = {
+                    note = { type = "string", description = "Omit to read and clear; give text to replace the pad." }
+                }
+            }
+        }
+        class = "coded_tools.nttd.scratchpad.Scratchpad"
+        args = { pad = "watcher" }
+    }
+
+    {
+        name = "log_claim"
+        function = {
+            description = "Raise a claim mid-session for something the plan did not anticipate, or revise one by passing its id. A revision APPENDS; the earlier one is kept. The gates will adjust or refuse the write and tell you which."
+            parameters = {
+                type = "object"
+                properties = {
+                    claim = { type = "string", description = "One testable sentence." }
+                    domain = { type = "string", description = "common, strategist, scout, builder, fleet or care." }
+                    conditions = { type = "string", description = "REQUIRED. The state this held under, including the game day." }
+                    status = { type = "string", description = "open, supported or refuted. refuted requires refuted_despite." }
+                    confidence = { type = "string", description = "low, med or high. high needs 2 varied conditions, med needs 1." }
+                    evidence = { type = "string", description = "What you actually observed, with figures." }
+                    varied = { type = "string", description = "What you CHANGED between observations, semicolon-separated." }
+                    refuted_despite = { type = "string", description = "For refuted only: an observation where the doubted condition WAS satisfied and the effect still did not occur." }
+                    re_test_when = { type = "string", description = "The trigger that reopens this. Mandatory when refuted or low confidence." }
+                    id = { type = "string", description = "Pass an existing claim id to revise it." }
+                }
+                required = ["claim", "domain", "conditions"]
+            }
+        }
+        class = "coded_tools.nttd.log_claim.LogClaim"
+        # Recorded as watcher-origin so a later reader can ask whether mid-session observations
+        # are worth as much as boundary ones.
+        args = { origin = "watcher" }
+    }
+]
