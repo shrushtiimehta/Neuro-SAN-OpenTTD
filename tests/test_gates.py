@@ -16,6 +16,7 @@ import pathlib
 import shutil
 
 import pytest
+from pyhocon import ConfigFactory
 
 from coded_tools import claims
 from coded_tools import paths
@@ -372,3 +373,47 @@ def test_every_seed_keeps_the_learned_heading_it_is_spliced_at():
         with open(REPO_ROOT / paths.seed(section), encoding="utf-8") as handle:
             body = handle.read()
         assert paths.LEARNED_HEADER + "\n" in body, f"{section} seed lost its splice point"
+
+
+# --- each agent is BOUND to its own playbook, not merely asked to read it -------------------------
+
+
+def _reader_maps(registry: str) -> dict[str, dict[str, str]]:
+    """{tool name: its name_map} for every per-job playbook reader in a generated player."""
+    # basedir is the repo root: the registry includes nttd_common.hocon, and the autouse
+    # fixture has moved cwd to a tmp dir where that include cannot resolve.
+    config = ConfigFactory.parse_string((REPO_ROOT / registry).read_text(encoding="utf-8"), basedir=str(REPO_ROOT))
+    return {
+        tool["name"]: dict((tool.get("args", None) or {}).get("name_map", None) or {})
+        for tool in config.get("tools", None) or []
+        if str(tool.get("name", "")).startswith("read_playbook_")
+    }
+
+
+@pytest.mark.parametrize("registry", ["registries/nttd_air_player.hocon", "registries/nttd_rail_player.hocon"])
+def test_a_worker_cannot_address_another_workers_playbook(registry):
+    maps = _reader_maps(registry)
+    assert len(maps) == 5, f"one reader per job, got {sorted(maps)}"
+    for job in ("scout", "builder", "fleet", "care"):
+        addressable = set(maps[f"read_playbook_{job}"])
+        assert addressable == {"playbook_common", f"playbook_{job}"}, (
+            f"{job} can address {sorted(addressable)}; the split is a binding, not a request"
+        )
+
+
+@pytest.mark.parametrize("registry", ["registries/nttd_air_player.hocon", "registries/nttd_rail_player.hocon"])
+def test_only_the_front_man_reads_the_session_plan(registry):
+    maps = _reader_maps(registry)
+    assert "session_plan" in maps["read_playbook_strategist"]
+    for job in ("scout", "builder", "fleet", "care"):
+        assert "session_plan" not in maps[f"read_playbook_{job}"]
+
+
+def test_an_unaddressable_playbook_is_refused_by_name():
+    """The deny-by-default map is what makes the binding real at call time."""
+    scout_map = {
+        "playbook_common": "state/{mode}/playbook_common.md",
+        "playbook_scout": "state/{mode}/playbook_scout.md",
+    }
+    reply = StateRead().invoke({"name": "playbook_builder", "name_map": scout_map}, {})
+    assert str(reply).startswith("ERROR: unknown_name"), reply

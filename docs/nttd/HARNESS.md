@@ -223,6 +223,47 @@ neuro-san itself.
 
 ---
 
+## 9. The player network: five jobs, one chooser
+
+Five agents, split by LIFECYCLE STAGE rather than by domain — find, build, buy, maintain, with a
+strategist over them. The stage is the right axis because the failure modes cluster there: the
+builder's are terrain and order-of-work, the fleet's are toggles and order flags, care's are
+time-based. A per-route or per-cargo split would need every agent to carry all four skill sets.
+
+| agent | playbook | offers |
+|---|---|---|
+| `AirCompany` / `RailCompany` | `strategist` | chooses; commits; records why |
+| `Scout` | `scout` | which corridor, ranked best first |
+| `Builder` | `builder` | how to build it |
+| `FleetGrowth` | `fleet` | which vehicle, how many, buy or clone |
+| `FleetCare` | `care` | repoint, retire, or leave alone |
+
+**Workers offer, the strategist chooses.** A worker holds one job and one part of the position;
+the strategist holds the session plan, the claims and the whole board. So a worker comes back with
+two or three defensible moves — what each costs, what each risks — and names the one it would
+take. The strategist takes that recommendation unless it has a reason to differ, and says what it
+is trading against what when it does.
+
+Two guards on that, both in `nttd_worker_conduct`:
+
+- Where there is genuinely one move, a worker says so and says why the alternatives are closed.
+  A list manufactured to look thorough spends the strategist's turn on a decision that was never
+  open.
+- Every choice is recorded with `note_decision`, INCLUDING the option not taken. A session that
+  recorded only what it did cannot tell the planner whether the alternative was considered and
+  rejected or never seen, and those two produce very different claims at the close.
+
+`decisions` crosses the sly_data boundary and the runner writes it to
+`state/telemetry/agents.sNNN.jsonl`, so the reasoning survives the session that had it.
+
+**Each agent is BOUND to its own playbook, not asked to read only it.** `read_playbook_<job>` has
+a `name_map` of exactly two entries — the shared ground and its own — so Scout cannot address the
+builder's playbook at all. It was one shared reader advertising all six, with a line of prompt
+text asking each agent to read only its own: about 3,100 tokens per agent per session when
+ignored, and nothing to stop it being ignored.
+
+---
+
 ## 9a. Baseline, earned, working — and one set per mode
 
 Three things, kept apart deliberately:

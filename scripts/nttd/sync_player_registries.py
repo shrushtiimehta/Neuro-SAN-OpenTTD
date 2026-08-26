@@ -62,6 +62,71 @@ NETWORKS = {"air": "ns_air_agent.hocon", "rail": "ns_rail_agent.hocon"}
 LEAD_TOOLS = ('"read_playbook"', '"read_claims"', '"scratchpad"')
 WORKER_TOOLS = ('"read_playbook"',)
 
+# Which agent owns which playbook. The front man is named for its mode; the workers are not.
+#
+# BOUND per agent, not merely instructed. The tool used to advertise all six playbooks to every
+# agent and a line of prompt text asked each to read only its own — which made the whole split
+# voluntary, and worth about 3,100 tokens per agent per session when ignored. `name_map` is
+# deny-by-default for exactly this reason: the addressable surface should be what the registry
+# lists, so Scout cannot name the builder's playbook at all.
+JOBS = {
+    "AirCompany": "strategist",
+    "RailCompany": "strategist",
+    "Scout": "scout",
+    "Builder": "builder",
+    "FleetGrowth": "fleet",
+    "FleetCare": "care",
+}
+
+READER = """    {{
+        name = "{tool}"
+        function = {{
+            description = "{blurb}"
+            parameters = {{
+                type = "object"
+                properties = {{
+                    name = {{ type = "string", description = "One of: {names}." }}
+                }}
+                required = ["name"]
+            }}
+        }}
+        class = "coded_tools.state_read.StateRead"
+        args = {{
+            name_map = {{
+{maps}
+            }}
+        }}
+    }}
+"""
+
+
+def reader_name(job: str) -> str:
+    """The tool one job reads its own playbook with."""
+    return f"read_playbook_{job}"
+
+
+def _readers() -> str:
+    """One reader per job, each addressing the shared ground and its own playbook and nothing else."""
+    blocks = []
+    for job in ("strategist", "scout", "builder", "fleet", "care"):
+        entries = {
+            "playbook_common": "state/{mode}/playbook_common.md",
+            f"playbook_{job}": "state/{mode}/playbook_" + job + ".md",
+        }
+        if job == "strategist":
+            # The front man alone reads what the planner compiled for this session.
+            entries["session_plan"] = "state/session_plan.md"
+            entries["current_best_plan"] = "state/current_best_plan.md"
+        maps = "\n".join(f'                {k:<19} = "{v}"' for k, v in entries.items())
+        blurb = (
+            "The shared ground and your own strategy, including every rule an earlier session "
+            "promoted for this job. Read it before deciding anything"
+            + (", and the session plan before your first move." if job == "strategist" else ".")
+        )
+        blocks.append(READER.format(tool=reader_name(job), blurb=blurb, names=", ".join(entries), maps=maps))
+    return "\n".join(blocks)
+
+
 # The playbooks a player may read. Its own five jobs plus the shared ground.
 PLAYBOOKS = ("playbook_strategist", "playbook_scout", "playbook_builder", "playbook_fleet", "playbook_care")
 
@@ -101,29 +166,7 @@ KNOWLEDGE = """
     # verdict on it: judging needs the whole run in view, and a turn has only the position in
     # front of it. Recording is the planner's job at a session boundary.
     # =========================================================================================
-    {{
-        name = "read_playbook"
-        function = {{
-            description = "The strategy for one job, including every rule promoted by an earlier session. Read your own before deciding anything, and the session plan before your first move."
-            parameters = {{
-                type = "object"
-                properties = {{
-                    name = {{ type = "string", description = "One of: playbook_common, {names}, session_plan, current_best_plan." }}
-                }}
-                required = ["name"]
-            }}
-        }}
-        class = "coded_tools.state_read.StateRead"
-        args = {{
-            name_map = {{
-                playbook_common     = "state/{{mode}}/playbook_common.md"
-{maps}
-                session_plan        = "state/session_plan.md"
-                current_best_plan   = "state/current_best_plan.md"
-            }}
-        }}
-    }}
-
+{readers}
     {{
         name = "read_claims"
         function = {{
@@ -158,28 +201,42 @@ KNOWLEDGE = """
 
 
 def _wire_knowledge_tools(body: str) -> tuple[str, int]:
-    """Name the knowledge tools in each agent's own `tools` list, so they are reachable.
+    """Give each agent its OWN playbook reader, and the front man the claims and the pad.
 
-    Keyed on indentation: the registry's top-level `tools` array sits at column 0 and every
-    agent's sits indented, so requiring leading whitespace touches the agents and nothing else.
-    The first indented array is the front man, which is the one that also gets the claims and
-    the pad.
+    neuro-san validates reachability: a tool declared in the top-level array but named by no
+    agent's `tools` list invalidates the whole registry and the server skips it silently. That
+    happened, and it reads exactly like the PYTHONPATH trap.
+
+    Each agent is wired to `read_playbook_<its job>` and to no other, so the per-job split is a
+    binding rather than a request. `read_claims` and `scratchpad` go to the front man alone:
+    judging what past sessions established is strategist work, and the pad is one pad per network
+    — five agents sharing it would clobber each other's note.
+
+    Keyed on the agent name that precedes each indented `tools` array. The registry's own
+    top-level array sits at column 0, so requiring leading whitespace touches agents and nothing
+    else.
     """
-    seen = 0
-
-    def wire(match: re.Match) -> str:
-        nonlocal seen
-        seen += 1
-        indent, inner = match.group("indent"), match.group("inner")
-        add = LEAD_TOOLS if seen == 1 else WORKER_TOOLS
-        add = tuple(name for name in add if name not in inner)
-        if not add:
-            return match.group(0)
-        if "\n" in inner:  # multi-line list: keep it multi-line
-            return f"{indent}tools = [{inner.rstrip()}\n{indent}    {', '.join(add)},\n{indent}]"
-        return f"{indent}tools = [{inner.strip()}, {', '.join(add)}]"
-
-    return re.sub(r"^(?P<indent>[ ]+)tools = \[(?P<inner>.*?)\]", wire, body, flags=re.S | re.M), seen
+    out, wired, job = [], 0, None
+    for line in body.splitlines(keepends=True):
+        found = re.match(r'\s+name = "(\w+)"', line)
+        if found and found.group(1) in JOBS:
+            job = JOBS[found.group(1)]
+        opened = re.match(r"(?P<indent>[ ]+)tools = \[(?P<rest>.*)$", line)
+        if opened and job:
+            add = [f'"{reader_name(job)}"']
+            if job == "strategist":
+                add += ['"read_claims"', '"scratchpad"']
+            rest = opened.group("rest")
+            indent = opened.group("indent")
+            if rest.rstrip().endswith("]"):  # single-line array
+                inner = rest.rstrip()[:-1].rstrip().rstrip(",")
+                line = f"{indent}tools = [{inner}, {', '.join(add)}]\n"
+            else:  # multi-line: the names go on their own line, closed by the existing bracket
+                line = f"{indent}tools = [{rest}\n{indent}    {', '.join(add)},\n"
+            wired += 1
+            job = None
+        out.append(line)
+    return "".join(out), wired
 
 
 def generate(mode: str, src_name: str) -> tuple[pathlib.Path, int]:
@@ -201,8 +258,7 @@ def generate(mode: str, src_name: str) -> tuple[pathlib.Path, int]:
     stripped = body.rstrip()
     if not stripped.endswith("]"):
         raise SystemExit(f"{src_name}: expected the file to end with its tools array")
-    maps = "\n".join(f'                {name:<19} = "state/{{mode}}/{name}.md"' for name in PLAYBOOKS)
-    body = stripped[:-1].rstrip() + "\n" + KNOWLEDGE.format(names=", ".join(PLAYBOOKS), maps=maps)
+    body = stripped[:-1].rstrip() + "\n" + KNOWLEDGE.format(readers=_readers())
 
     out = OUT / f"nttd_{mode}_player.hocon"
     out.write_text(HEADER.format(src=src_name) + body)

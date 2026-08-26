@@ -86,11 +86,11 @@ Use note_decision when you commit to something, and say why. Keep taking turns u
 session ends.
 """ ${nttd_ground_rules}
         tools = [
+            "read_playbook_strategist", "read_claims", "scratchpad",
             "Scout", "Builder", "FleetGrowth", "FleetCare",
             "read_situation", "fleet_report", "route_report",
             "inspect", "refusals", "set_loan_to", "commit_plan", "advance_days",
             "note_decision",
-            "read_playbook", "read_claims", "scratchpad",
         ]
     }
 
@@ -127,7 +127,7 @@ distance is what built three separate stations that no train could enter.
 rank_corridors orders what it found. Report the best few by pair_id, with the cargo, the
 distance, and what the far end accepts.
 """ ${nttd_worker_conduct}
-        tools = ["choose_rail_type", "survey_rail_pairs", "rank_corridors", "inspect", "read_playbook"]
+        tools = ["choose_rail_type", "survey_rail_pairs", "rank_corridors", "inspect", "read_playbook_scout"]
     }
 
     {
@@ -163,7 +163,7 @@ built inside it cannot leave.
 
 Only when confirm_rail_route lists a corridor under ready_for_a_train is it a route.
 """ ${nttd_worker_conduct}
-        tools = ["plan_build_corridor", "confirm_rail_route", "plan_add_depot", "inspect", "read_playbook"]
+        tools = ["plan_build_corridor", "confirm_rail_route", "plan_add_depot", "inspect", "read_playbook_builder"]
     }
 
     {
@@ -195,7 +195,7 @@ plan_dispatch gives it the two station orders and starts it. Leave the order fla
 station only starts producing once a vehicle has visited it, so a train told to wait for a full
 load sits in an empty station forever and the route never starts.
 """ ${nttd_worker_conduct}
-        tools = ["choose_train", "plan_buy_train", "plan_dispatch", "inspect", "read_playbook"]
+        tools = ["choose_train", "plan_buy_train", "plan_dispatch", "inspect", "read_playbook_fleet"]
     }
 
     {
@@ -233,7 +233,7 @@ the two cannot be done in one step. It will refuse if no corridor has a depot jo
 line, and that refusal is right: a train sent to a depot it cannot reach never arrives, and the
 sale never becomes possible.
 """ ${nttd_worker_conduct}
-        tools = ["rail_health_check", "plan_repoint", "plan_retire", "fleet_report", "inspect", "read_playbook"]
+        tools = ["rail_health_check", "plan_repoint", "plan_retire", "fleet_report", "inspect", "read_playbook_care"]
     }
 
     # =========================================================================================
@@ -557,13 +557,13 @@ train sent to one it cannot reach never arrives.
     # front of it. Recording is the planner's job at a session boundary.
     # =========================================================================================
     {
-        name = "read_playbook"
+        name = "read_playbook_strategist"
         function = {
-            description = "The strategy for one job, including every rule promoted by an earlier session. Read your own before deciding anything, and the session plan before your first move."
+            description = "The shared ground and your own strategy, including every rule an earlier session promoted for this job. Read it before deciding anything, and the session plan before your first move."
             parameters = {
                 type = "object"
                 properties = {
-                    name = { type = "string", description = "One of: playbook_common, playbook_strategist, playbook_scout, playbook_builder, playbook_fleet, playbook_care, session_plan, current_best_plan." }
+                    name = { type = "string", description = "One of: playbook_common, playbook_strategist, session_plan, current_best_plan." }
                 }
                 required = ["name"]
             }
@@ -573,12 +573,92 @@ train sent to one it cannot reach never arrives.
             name_map = {
                 playbook_common     = "state/{mode}/playbook_common.md"
                 playbook_strategist = "state/{mode}/playbook_strategist.md"
-                playbook_scout      = "state/{mode}/playbook_scout.md"
-                playbook_builder    = "state/{mode}/playbook_builder.md"
-                playbook_fleet      = "state/{mode}/playbook_fleet.md"
-                playbook_care       = "state/{mode}/playbook_care.md"
                 session_plan        = "state/session_plan.md"
                 current_best_plan   = "state/current_best_plan.md"
+            }
+        }
+    }
+
+    {
+        name = "read_playbook_scout"
+        function = {
+            description = "The shared ground and your own strategy, including every rule an earlier session promoted for this job. Read it before deciding anything."
+            parameters = {
+                type = "object"
+                properties = {
+                    name = { type = "string", description = "One of: playbook_common, playbook_scout." }
+                }
+                required = ["name"]
+            }
+        }
+        class = "coded_tools.state_read.StateRead"
+        args = {
+            name_map = {
+                playbook_common     = "state/{mode}/playbook_common.md"
+                playbook_scout      = "state/{mode}/playbook_scout.md"
+            }
+        }
+    }
+
+    {
+        name = "read_playbook_builder"
+        function = {
+            description = "The shared ground and your own strategy, including every rule an earlier session promoted for this job. Read it before deciding anything."
+            parameters = {
+                type = "object"
+                properties = {
+                    name = { type = "string", description = "One of: playbook_common, playbook_builder." }
+                }
+                required = ["name"]
+            }
+        }
+        class = "coded_tools.state_read.StateRead"
+        args = {
+            name_map = {
+                playbook_common     = "state/{mode}/playbook_common.md"
+                playbook_builder    = "state/{mode}/playbook_builder.md"
+            }
+        }
+    }
+
+    {
+        name = "read_playbook_fleet"
+        function = {
+            description = "The shared ground and your own strategy, including every rule an earlier session promoted for this job. Read it before deciding anything."
+            parameters = {
+                type = "object"
+                properties = {
+                    name = { type = "string", description = "One of: playbook_common, playbook_fleet." }
+                }
+                required = ["name"]
+            }
+        }
+        class = "coded_tools.state_read.StateRead"
+        args = {
+            name_map = {
+                playbook_common     = "state/{mode}/playbook_common.md"
+                playbook_fleet      = "state/{mode}/playbook_fleet.md"
+            }
+        }
+    }
+
+    {
+        name = "read_playbook_care"
+        function = {
+            description = "The shared ground and your own strategy, including every rule an earlier session promoted for this job. Read it before deciding anything."
+            parameters = {
+                type = "object"
+                properties = {
+                    name = { type = "string", description = "One of: playbook_common, playbook_care." }
+                }
+                required = ["name"]
+            }
+        }
+        class = "coded_tools.state_read.StateRead"
+        args = {
+            name_map = {
+                playbook_common     = "state/{mode}/playbook_common.md"
+                playbook_care       = "state/{mode}/playbook_care.md"
             }
         }
     }
