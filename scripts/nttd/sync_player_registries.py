@@ -116,7 +116,7 @@ KNOWLEDGE = """
         class = "coded_tools.state_read.StateRead"
         args = {{
             name_map = {{
-                playbook_common     = "state/playbook_common.md"
+                playbook_common     = "state/{{mode}}/playbook_common.md"
 {maps}
                 session_plan        = "state/session_plan.md"
                 current_best_plan   = "state/current_best_plan.md"
@@ -201,7 +201,7 @@ def generate(mode: str, src_name: str) -> tuple[pathlib.Path, int]:
     stripped = body.rstrip()
     if not stripped.endswith("]"):
         raise SystemExit(f"{src_name}: expected the file to end with its tools array")
-    maps = "\n".join(f'                {name:<19} = "state/{name}.md"' for name in PLAYBOOKS)
+    maps = "\n".join(f'                {name:<19} = "state/{{mode}}/{name}.md"' for name in PLAYBOOKS)
     body = stripped[:-1].rstrip() + "\n" + KNOWLEDGE.format(names=", ".join(PLAYBOOKS), maps=maps)
 
     out = OUT / f"nttd_{mode}_player.hocon"

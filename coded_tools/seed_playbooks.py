@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 from datetime import datetime
 from datetime import timezone
@@ -56,7 +57,30 @@ _HEADERS = {
 }
 
 
-def prepare(fresh: bool) -> dict[str, Any]:
+def for_mode(text: str, mode: str) -> str:
+    """One seed, with the other modes' sections removed.
+
+    ONE seed set, filtered — not two hand-maintained copies. The seeds share about 87% of their
+    text, so a second copy would drift, and a rule fixed in one would stay wrong in the other.
+
+    Keyed on the heading, which the seeds already use: `### Air: ...`, `### Rail: ...`. A section
+    whose heading names a mode belongs to that mode; anything unheaded or generically headed
+    belongs to every mode. `### Water and road, for when those modes are written` goes for both,
+    because neither is written.
+    """
+    other = [m for m in paths.MODES if m != mode] + ["water and road"]
+    out, keep = [], True
+    for line in text.splitlines(keepends=True):
+        if line.startswith("### "):
+            head = line[4:].strip().lower()
+            keep = not any(head.startswith(name) for name in other)
+        # A learned line names the mode it was learned in; another mode's does not apply here.
+        if keep and (paths.learned_mode(line) or mode) == mode:
+            out.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "".join(out))
+
+
+def prepare(fresh: bool, mode: str | None = None) -> dict[str, Any]:
     """Get the state directory ready for a session. Returns what it did, for the run log."""
     os.makedirs(paths.STATE_DIR, exist_ok=True)
     os.makedirs(paths.LOG_DIR, exist_ok=True)
@@ -66,6 +90,9 @@ def prepare(fresh: bool) -> dict[str, Any]:
     # One playbook per agent, so this loops. Each is handled independently: a missing seed for
     # one section must not stop the other five being reset, because a session that starts with
     # five good playbooks and one absent is playable and one that refuses to start is not.
+    mode = paths.set_active_mode(mode) if mode else paths.active_mode()
+    did["mode"] = mode
+
     outcome: dict[str, str] = {}
     for section in paths.SECTIONS:
         source, working = paths.seed(section), paths.playbook(section)
@@ -74,7 +101,10 @@ def prepare(fresh: bool) -> dict[str, Any]:
             logger.warning("No seed at %s; %s is left as-is", source, working)
         elif fresh or not os.path.exists(working):
             FileIO.ensure_parent(working)
-            shutil.copyfile(source, working)
+            with open(source, encoding="utf-8") as handle:
+                body = handle.read()
+            with open(working, "w", encoding="utf-8") as handle:
+                handle.write(for_mode(body, mode))
             outcome[section] = "reseeded"
         else:
             outcome[section] = "kept"

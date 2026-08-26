@@ -179,8 +179,8 @@ not an answer this tool is entitled to give.
                 # edits a playbook and has no use for the builder's water crossings or the
                 # fleet's engine scoring. Handing it all six would be five sixths of a
                 # context window spent on advice for somebody else.
-                playbook_common          = "state/playbook_common.md"
-                playbook_strategist      = "state/playbook_strategist.md"
+                playbook_common          = "state/{mode}/playbook_common.md"
+                playbook_strategist      = "state/{mode}/playbook_strategist.md"
                 # The commons, read-only here: the watcher looks at what past sessions
                 # established but never revises it. Refutation needs the whole run in view.
                 claims                   = "state/claims.md"

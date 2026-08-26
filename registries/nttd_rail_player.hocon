@@ -571,12 +571,12 @@ train sent to one it cannot reach never arrives.
         class = "coded_tools.state_read.StateRead"
         args = {
             name_map = {
-                playbook_common     = "state/playbook_common.md"
-                playbook_strategist = "state/playbook_strategist.md"
-                playbook_scout      = "state/playbook_scout.md"
-                playbook_builder    = "state/playbook_builder.md"
-                playbook_fleet      = "state/playbook_fleet.md"
-                playbook_care       = "state/playbook_care.md"
+                playbook_common     = "state/{mode}/playbook_common.md"
+                playbook_strategist = "state/{mode}/playbook_strategist.md"
+                playbook_scout      = "state/{mode}/playbook_scout.md"
+                playbook_builder    = "state/{mode}/playbook_builder.md"
+                playbook_fleet      = "state/{mode}/playbook_fleet.md"
+                playbook_care       = "state/{mode}/playbook_care.md"
                 session_plan        = "state/session_plan.md"
                 current_best_plan   = "state/current_best_plan.md"
             }

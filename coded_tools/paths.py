@@ -69,9 +69,50 @@ TELEMETRY_DIR: Final = "state/telemetry"
 # there is one copy.
 
 
+# The mode being played, written by the runner at session start and read by everything else.
+#
+# Air and rail need SEPARATE playbooks, and the reason is not the tokens — it is that
+# `promote_claim` takes a `domain` and no mode, so a rule an air session learned would land in
+# the same file a rail session reads. Claims are condition-gated by Gate 3 and would be flagged;
+# a promoted playbook line is just text and would not be. That is the leak this closes.
+#
+# Resolved HERE rather than passed through every tool, because one planner network serves both
+# modes — it cannot be bound to one in its registry — and a tool that took a mode argument would
+# be a tool a model could get wrong.
+MODE_PATH: Final = os.path.join(STATE_DIR, "mode")
+MODES: Final = ("air", "rail")
+DEFAULT_MODE: Final = "air"
+
+
+def active_mode() -> str:
+    """Which mode this session is playing. Falls back to air if nothing has been written."""
+    try:
+        with open(MODE_PATH, encoding="utf-8") as handle:
+            mode = handle.read().strip().lower()
+    except OSError:
+        return DEFAULT_MODE
+    return mode if mode in MODES else DEFAULT_MODE
+
+
+def set_active_mode(mode: str) -> str:
+    """Record the mode for this session. The runner calls this before anything else reads it."""
+    mode = (mode or "").strip().lower()
+    if mode not in MODES:
+        mode = DEFAULT_MODE
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(MODE_PATH, "w", encoding="utf-8") as handle:
+        handle.write(mode + "\n")
+    return mode
+
+
+def mode_dir(mode: str | None = None) -> str:
+    """Where one mode's working playbooks live."""
+    return os.path.join(STATE_DIR, mode or active_mode())
+
+
 def playbook(section: str) -> str:
     """The working copy of one agent's playbook."""
-    return os.path.join(STATE_DIR, f"playbook_{section}.md")
+    return os.path.join(mode_dir(), f"playbook_{section}.md")
 
 
 def seed(section: str) -> str:
@@ -119,12 +160,24 @@ def scratchpad(pad: str) -> str:
 # "(learned sN)", so a substring test called that documentation line a promoted rule and made
 # it demotable. Requiring \d+ separates a real tag from prose about tags.
 LEARNED_MARKER: Final = "(learned s"
-_LEARNED_RE: Final = re.compile(r"\(learned s\d+\)")
+
+# The mode is part of the tag, because `promote_claim` mirrors every learned line back into the
+# SHARED seed so it survives a `--fresh`. Without the mode in the tag, a rule an air session
+# learned would be seeded into rail's playbook on the next reset — around the per-mode split
+# rather than through it. The mode group is optional so a tag written before this still matches.
+_LEARNED_RE: Final = re.compile(r"\(learned s\d+(?: (?:air|rail))?\)")
+_LEARNED_MODE_RE: Final = re.compile(r"\(learned s\d+ (air|rail)\)")
 
 
-def learned_tag(session_number: int) -> str:
-    """The marker appended to a rule promoted in this session."""
-    return f"{LEARNED_MARKER}{session_number})"
+def learned_tag(session_number: int, mode: str | None = None) -> str:
+    """The marker appended to a rule promoted in this session, naming the mode it was learned in."""
+    return f"{LEARNED_MARKER}{session_number} {mode or active_mode()})"
+
+
+def learned_mode(line: str) -> str | None:
+    """Which mode a promoted line was learned in, or None for an untagged or baseline line."""
+    found = _LEARNED_MODE_RE.search(line)
+    return found.group(1) if found else None
 
 
 def is_learned(line: str) -> bool:

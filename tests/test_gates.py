@@ -23,6 +23,7 @@ from coded_tools import seed_playbooks
 from coded_tools.log_claim import LogClaim
 from coded_tools.promote_claim import PromoteClaim
 from coded_tools.read_claims import ReadClaims
+from coded_tools.state_read import StateRead
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -248,3 +249,62 @@ def test_promotion_works_for_every_section(section):
     PromoteClaim().invoke({"domain": section, "edit_type": "add_line", "new_text": rule, "session_number": 3}, {})
     with open(paths.playbook(section), encoding="utf-8") as handle:
         assert rule in handle.read().rpartition(paths.LEARNED_HEADER)[2]
+
+
+# --- air and rail keep separate playbooks ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode, mine, theirs", [("air", "Air", "Rail"), ("rail", "Rail", "Air")])
+def test_a_mode_is_seeded_only_its_own_sections(mode, mine, theirs):
+    seed_playbooks.prepare(fresh=True, mode=mode)
+    with open(paths.playbook("builder"), encoding="utf-8") as handle:
+        body = handle.read()
+    assert f"### {mine}:" in body
+    assert f"### {theirs}:" not in body, "the other mode's rules are noise this one cannot act on"
+
+
+def test_the_two_modes_get_separate_directories():
+    seed_playbooks.prepare(fresh=True, mode="air")
+    air = paths.playbook("scout")
+    seed_playbooks.prepare(fresh=True, mode="rail")
+    assert paths.playbook("scout") != air, "one file for both modes is how a rail rule reaches air"
+
+
+def test_a_rule_learned_in_one_mode_does_not_reach_the_other():
+    """`promote_claim` mirrors into the SHARED seed, so the tag is what keeps the modes apart."""
+    seed_playbooks.prepare(fresh=True, mode="air")
+    PromoteClaim().invoke(
+        {
+            "domain": "scout",
+            "edit_type": "add_line",
+            "new_text": "Coastal pairs beat inland on t1.",
+            "session_number": 4,
+        },
+        {},
+    )
+    with open(paths.playbook("scout"), encoding="utf-8") as handle:
+        assert "Coastal pairs beat inland" in handle.read()
+
+    seed_playbooks.prepare(fresh=True, mode="rail")
+    with open(paths.playbook("scout"), encoding="utf-8") as handle:
+        assert "Coastal pairs beat inland" not in handle.read(), "an air session's finding is not rail doctrine"
+
+
+def test_a_learned_line_names_the_mode_it_came_from():
+    seed_playbooks.prepare(fresh=True, mode="rail")
+    reply = PromoteClaim().invoke(
+        {"domain": "fleet", "edit_type": "add_line", "new_text": "Two locomotives per corridor.", "session_number": 2},
+        {},
+    )
+    assert paths.learned_mode(reply["line"]) == "rail", reply
+
+
+def test_state_read_resolves_the_mode_placeholder():
+    """The planner and watcher are one network each, serving both modes, so their binding
+    cannot name a mode statically — `{mode}` is what lets one map resolve in either."""
+    mapping = {"playbook_builder": "state/{mode}/playbook_builder.md"}
+    for mode, mine, theirs in (("air", "Air", "Rail"), ("rail", "Rail", "Air")):
+        seed_playbooks.prepare(fresh=True, mode=mode)
+        reply = StateRead().invoke({"name": "playbook_builder", "name_map": mapping}, {})
+        assert reply["file_path"] == f"state/{mode}/playbook_builder.md", reply
+        assert f"### {mine}:" in reply["content"] and f"### {theirs}:" not in reply["content"]

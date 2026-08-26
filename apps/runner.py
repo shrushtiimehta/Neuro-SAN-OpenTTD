@@ -659,7 +659,10 @@ def main() -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-    did = seed_playbooks.prepare(fresh=args.fresh)
+    # The mode comes from the network being played, not from a separate flag that could disagree
+    # with it. `nttd_air_player` plays air; there is no arrangement where those two differ.
+    mode = "rail" if "rail" in args.network else "air"
+    did = seed_playbooks.prepare(fresh=args.fresh, mode=mode)
     print(f"state: {did}")
     if args.new_session:
         print(f"opened session number {session_number.open_next()}")

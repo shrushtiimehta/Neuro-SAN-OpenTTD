@@ -223,6 +223,37 @@ neuro-san itself.
 
 ---
 
+## 9a. One playbook set per mode
+
+`state/air/` and `state/rail/` hold separate working playbooks. The seeds stay a SINGLE set in
+`coded_tools/config_files/` and are filtered when they are copied, because two hand-maintained
+copies sharing 87% of their text would drift, and a rule fixed in one would stay wrong in the
+other. Filtering keys on the headings the seeds already use — `### Air:`, `### Rail:` — and drops
+`### Water and road`, since neither mode is written.
+
+**The tokens are the smaller reason.** Air sheds 19% of the seed text and rail 17%, about 1,050
+tokens per playbook read.
+
+**The real reason is that a promoted rule is not condition-gated.** `promote_claim` takes a
+`domain` and no mode, so before this a rule an air session learned landed in the same file a rail
+session read. A *claim* carries CONDITIONS and Gate 3 flags it when they differ; a promoted
+playbook line is just text, and nothing would have flagged it.
+
+Two things close that, and both are needed:
+
+- The working playbooks live under `state/<mode>/`.
+- `learned_tag` writes the mode into the tag — `(learned s3 air)` — because `promote_claim`
+  mirrors every learned line back into the shared seed so it survives `--fresh`. Without the mode
+  in the tag the rule would come back through the seed on the next reset, around the split rather
+  than through it. The seed filter drops learned lines belonging to another mode.
+
+The mode is written to `state/mode` by the runner, derived from the network being played, and
+read by `paths.active_mode()`. Registry `name_map` values use a `{mode}` placeholder that
+`NameMap.resolve` expands: the planner and the watcher are one network each serving BOTH modes,
+so their bindings cannot name a mode statically.
+
+---
+
 ## 10. logs/ versus state/
 
 **The test is whether the next session needs it.**

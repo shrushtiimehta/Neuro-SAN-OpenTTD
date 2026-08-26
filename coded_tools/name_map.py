@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from coded_tools import paths
+
 
 class NameMap:
     """Validate a model-supplied `name` against the operator-supplied map."""
@@ -48,5 +50,12 @@ class NameMap:
 
     @staticmethod
     def resolve(args: dict[str, Any]) -> str:
-        """The path for a name already known to validate. Call `validate` first."""
-        return str(args["name_map"][args["name"]])
+        """The path for a name already known to validate. Call `validate` first.
+
+        `{mode}` in a mapped path expands to the mode being played. The playbooks are per-mode —
+        a rail rule is noise an air session cannot act on, and worse, a rule promoted in one mode
+        would otherwise become doctrine in the other. The planner and the watcher are single
+        networks serving BOTH modes, so their maps cannot name a mode statically; this is what
+        lets one binding resolve correctly in either.
+        """
+        return str(args["name_map"][args["name"]]).replace("{mode}", paths.active_mode())
