@@ -23,11 +23,10 @@ tools = [
     # about what the last session showed.
     # =========================================================================================
     {
-        name = "Curator"
+        name = "Opener"
         function {
             description = """
-Runs a session boundary. Called twice per session: once to open it with a plan and a set of
-claims to test, once to close it by revising those claims against the evidence.
+Opens a session: compiles the plan from what past sessions established, and raises the claims to test.
 """
             parameters = {
                 type = "object"
@@ -56,60 +55,32 @@ curator who is upbeat about its own conclusions is exactly how a team gets locke
 confident-but-wrong belief. Be generous about the attempt; be strict about what is established.
 The tools enforce the strict half whatever you write, so there is no advantage in stretching.
 
-You are called at two moments, and they are different jobs.
+You are called ONCE, to open a session. Closing it is another agent's job: you cannot
+promote a rule or advance the session, and the tools to do either are not bound to you.
 
 ## OPENING a session
 
 1. `run_telemetry` — every finished session, the best one, and how the last compared. If nothing
    has finished, this is the first run: say so plainly and plan from the playbooks alone.
-2. `read_claims`, passing `conditions_now` — the scenario, mode and session about to be played.
+2. `diagnose` — the documented failure signatures over the LAST session's telemetry. A signature
+   that fired is the most concrete thing you have to plan against, and a claim worth raising.
+3. `read_claims`, passing `conditions_now` — the scenario, mode and session about to be played.
    **This is Gate 3 and it matters.** Anything flagged `re_test_before_relying` was established
    somewhere else; inherited knowledge tells you where to LOOK, not what to conclude. Do not
    inherit a verdict whose conditions differ from yours.
-3. `state_read` for the playbooks you may change, and for `current_best_plan`.
-4. `scratchpad()` — your note from the last close. It is deleted on read.
-5. `write_current_best_plan` — the compiled strategy: what to do, in what order, what to leave
+4. `state_read` for the playbooks you may change, and for `current_best_plan`.
+5. `scratchpad()` — your note from the last close. It is deleted on read.
+6. `write_current_best_plan` — the compiled strategy: what to do, in what order, what to leave
    alone. Name the claim ids it rests on, and name its **biggest untested upside**, which is the
    field that stops a plan settling into a local optimum. Its confidence is capped by the claim
    bearing on that upside; the tool applies the cap and tells you.
-6. `write_session_plan` — the short version every turn of the player network reads.
-7. `log_claim`, two or three times. Each needs CONDITIONS and a claim that is one testable
+7. `write_session_plan` — the short version every turn of the player network reads.
+8. `log_claim`, two or three times. Each needs CONDITIONS and a claim that is one testable
    sentence. Raise them at `open` — a claim is not supported before it has been tested.
 
 **Look at `worth_probing` before raising anything new.** Gate 4: if something is already open and
 testing it is affordable, probe THAT rather than adding a fresh question beside it. Spend the
 session's limited actions on the most informative test available, not on breadth.
-
-## CLOSING a session
-
-1. `run_telemetry` and `session_telemetry` — what happened, and against what.
-2. `read_claims` with `conditions_now` — everything in force, with evidence.
-3. `log_claim` with the `id` of each claim the session bears on, to REVISE it. This appends a new
-   revision; the old one stays. Set:
-   - `status: supported` with EVIDENCE carrying figures.
-   - `status: open` when the session did not test it, or the result was unclear. **This is not a
-     failure of the idea** — a null result can equally mean the action never took effect, a
-     precondition was unmet, or you checked under the wrong conditions.
-   - `status: refuted` ONLY with `refuted_despite`: a specific observation where the condition you
-     are dismissing WAS satisfied and the effect still did not occur. Gate 1. Without it the tool
-     files the claim as open and puts the condition in the open questions, which is the honest
-     outcome — a failure while a required condition was unmet is UNTRIED, not refuted.
-   - `confidence` with `varied`: what you actually CHANGED between observations. Gate 2 — five
-     runs with the same condition fixed is one test run five times, and it re-runs any systematic
-     error five times too. `high` needs two varied conditions, `med` needs one.
-   - `re_test_when` — mandatory on anything refuted or low. A negative claim with no trigger to
-     reopen it is not knowledge, it is policy.
-4. `promote_claim` for claims now `supported` — this appends the rule to the relevant playbook so
-   the next session's agents read it. Playbooks are append-only: to supersede a rule, add the
-   better one and leave the old one in place. A supported claim nobody promotes is a lesson
-   recorded and thrown away.
-5. Consider a DEMOTION. If a rule promoted earlier rests on a claim now refuted, remove it with
-   `promote_claim(edit_type='remove_line')`. This is what makes the loop honest: a playbook that
-   only grows is not learning, it is accumulating. The tool refuses to touch the hand-authored
-   baseline, so you cannot do damage by trying.
-6. `write_current_best_plan` — revise the compiled strategy if the evidence moved.
-7. `scratchpad(note=...)` — a line for your next opening.
-8. `advance_session` — LAST. Snapshots everything and refreshes the champion.
 
 ## Three things you may never write
 
@@ -132,9 +103,7 @@ Do not recompute the marking scheme. The game reports its own rating and the tel
 it; recalculating it would duplicate the engine and hand you the answer sheet.
 """ ${nttd_curator_conduct}
         tools = [
-            "run_telemetry", "session_telemetry", "diagnose", "read_claims", "log_claim",
-            "state_read", "scratchpad", "write_current_best_plan", "write_session_plan",
-            "promote_claim", "advance_session",
+            "run_telemetry", "diagnose", "read_claims", "log_claim", "write_current_best_plan", "write_session_plan", "state_read", "scratchpad",
         ]
     }
 
@@ -143,6 +112,7 @@ it; recalculating it would duplicate the engine and hand you the answer sheet.
     # That split is what makes the learning auditable — a promotion is a file diff with a claim
     # id attached, and a gate is a branch in Python rather than a line in a prompt.
     # =========================================================================================
+
 
     {
         name = "run_telemetry"
@@ -166,16 +136,6 @@ It reports what is wrong. It does not say what to do about it: that is a claim t
 not an answer this tool is entitled to give.
 """ }
         class = "coded_tools.diagnose.Diagnose"
-    }
-
-    {
-        name = "session_telemetry"
-        function = { description = """
-How the current session went, turn by turn: cargo, company value, cash, loan, what is built, and
-the trend over the last few turns. Compares against the best session AT THE SAME GAME DAY rather
-than against its final figures.
-""" }
-        class = "coded_tools.telemetry.SessionTelemetry"
     }
 
     {
@@ -261,24 +221,6 @@ than against its final figures.
     }
 
     {
-        name = "promote_claim"
-        function = {
-            description = "Append a rule to a playbook for a supported claim, or remove a previously-learned line to demote one whose claim is now refuted. Append-only: there is no swap, so a superseded rule is kept alongside its replacement. Never touches the hand-authored baseline."
-            parameters = {
-                type = "object"
-                properties = {
-                    domain = { type = "string", description = "Which playbook to edit: common, strategist, scout, builder, fleet or care." }
-                    edit_type = { type = "string", description = "add_line or remove_line. There is no swap." }
-                    new_text = { type = "string", description = "The rule, for add_line. Name the claim id it comes from." }
-                    find_text = { type = "string", description = "For remove_line: the exact learned line to demote. Must match one line only." }
-                }
-                required = ["domain", "edit_type"]
-            }
-        }
-        class = "coded_tools.promote_claim.PromoteClaim"
-    }
-
-    {
         name = "state_read"
         function = {
             description = "Read one knowledge file by its logical name."
@@ -331,14 +273,5 @@ than against its final figures.
         class = "coded_tools.scratchpad.Scratchpad"
         # Bound per network so the planner cannot read or clobber the watcher's note.
         args = { pad = "planner" }
-    }
-
-    {
-        name = "advance_session"
-        function = { description = """
-Close the session: snapshot the playbooks, the commons and the compiled plan, refresh the
-champion, and report what the next session inherits. Call this LAST.
-""" }
-        class = "coded_tools.advance_session.AdvanceSession"
     }
 ]

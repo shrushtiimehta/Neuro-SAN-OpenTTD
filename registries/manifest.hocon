@@ -25,6 +25,7 @@
 {
     "nttd_air_player.hocon": true
     "nttd_rail_player.hocon": true
-    "nttd_planner.hocon": true
+    "nttd_opener.hocon": true
+    "nttd_closer.hocon": true
     "nttd_watcher.hocon": true
 }

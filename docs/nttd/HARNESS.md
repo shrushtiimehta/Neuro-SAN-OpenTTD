@@ -44,7 +44,7 @@ Same shape as `Neuro-SAN-MAPs`, with one difference forced by the target: MAPs h
 
 ### `registries/`
 
-`nttd_common.hocon` (caps, models, sly_data allow-lists), `nttd_planner.hocon`,
+`nttd_common.hocon` (caps, models, sly_data allow-lists), `nttd_opener.hocon / nttd_closer.hocon`,
 `nttd_watcher.hocon`, `manifest.hocon`. Wired by the root `.env`:
 
 ```bash
@@ -220,6 +220,34 @@ ordering across two sessions; every `.hocon` parsing; all 17 registry `class` re
 macOS-only and wants `/Applications/OpenTTD.app/Contents/MacOS/openttd`. The neuro-san server has
 also never loaded these registries — the HOCON is valid and structurally sound but unproven against
 neuro-san itself.
+
+---
+
+## 8a. Two boundary agents, not one
+
+`nttd_opener` and `nttd_closer` are separate networks. They were one `Curator`, on the argument
+that "opening and closing are the same act of judgement pointed in two directions". That argument
+does not survive contact with the tools.
+
+**The powers differ, and the split makes that enforceable:**
+
+| | opener | closer |
+|---|---|---|
+| `write_session_plan` | ✅ writes it | ❌ the plan is what it judges against |
+| `promote_claim` | ❌ | ✅ |
+| `advance_session` | ❌ | ✅ |
+| `session_telemetry` | ❌ nothing has happened yet | ✅ |
+
+An opener that could promote a rule or advance the session could close a session it never
+watched. A closer that could rewrite the session plan could revise the target after seeing the
+score. Neither is possible now, and there are tests for both.
+
+They also stop paying for each other: one `Curator` carried both procedures on every call, so an
+opening spent ~570 tokens reading a closing procedure it would not use — and might act on.
+
+The "two agents disagreeing" risk the original comment worried about is not real: they never run
+concurrently. The closer writes the ledger, the opener reads it next session, and the scratchpad
+carries a note between them. They agree by reading the same files, not by being the same agent.
 
 ---
 

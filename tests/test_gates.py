@@ -417,3 +417,46 @@ def test_an_unaddressable_playbook_is_refused_by_name():
     }
     reply = StateRead().invoke({"name": "playbook_builder", "name_map": scout_map}, {})
     assert str(reply).startswith("ERROR: unknown_name"), reply
+
+
+# --- the session boundaries are two agents with different powers ------------------------------------
+
+
+def _registry(name: str):
+    return ConfigFactory.parse_string(
+        (REPO_ROOT / "registries" / f"{name}.hocon").read_text(encoding="utf-8"), basedir=str(REPO_ROOT)
+    )
+
+
+def test_the_opener_cannot_promote_or_close_a_session():
+    """Capability, not convenience: an opener able to promote or advance could close a session
+    it never watched, and the split would be cosmetic."""
+    tools = {t.get("name") for t in _registry("nttd_opener")["tools"]}
+    assert "promote_claim" not in tools
+    assert "advance_session" not in tools
+    assert {"write_session_plan", "log_claim", "read_claims"} <= tools
+
+
+def test_the_closer_cannot_rewrite_the_session_plan_it_is_judging():
+    tools = {t.get("name") for t in _registry("nttd_closer")["tools"]}
+    assert "write_session_plan" not in tools, "the plan is what the session is judged against"
+    assert {"promote_claim", "advance_session", "session_telemetry"} <= tools
+
+
+@pytest.mark.parametrize("network", ["nttd_opener", "nttd_closer", "nttd_watcher"])
+def test_diagnose_is_named_in_the_procedure_of_every_agent_it_is_bound_to(network):
+    """A tool bound but never mentioned is a tool that never gets called."""
+    config = _registry(network)
+    tools = {t.get("name") for t in config["tools"]}
+    assert "diagnose" in tools
+    instructions = " ".join(str(t.get("instructions", "")) for t in config["tools"] if not t.get("class", None))
+    assert "diagnose" in instructions, f"{network} binds diagnose and never tells the agent to use it"
+
+
+def test_no_prompt_names_a_status_that_does_not_exist():
+    """`inconclusive` and `not_applied` were in the curator conduct long after the schema dropped
+    them; a curator following that instruction got a refusal from log_claim."""
+    for name in ("nttd_common", "nttd_opener", "nttd_closer", "nttd_watcher"):
+        body = (REPO_ROOT / "registries" / f"{name}.hocon").read_text(encoding="utf-8")
+        for gone in ("inconclusive", "not_applied", "carried_over", "falsified"):
+            assert gone not in body, f"{name} still names the dead status '{gone}'"

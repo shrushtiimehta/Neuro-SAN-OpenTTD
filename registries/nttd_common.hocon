@@ -106,8 +106,13 @@ Three rules:
    evidence.
 2. Compare at the SAME game day, never against a finished session's final numbers. A run 90 days
    in is not behind a completed one; it is 90 days in.
-3. Say "I do not know" when the telemetry does not support a verdict. `inconclusive` and
-   `not_applied` exist precisely so that an untested hypothesis is not retired as a failed one.
+3. Say "I do not know" when the telemetry does not support a verdict. `open` is the status for
+   that, and it is not a failure: it means the session did not test the claim, or the result was
+   unclear, or a precondition was never met. Retiring an untested idea as `refuted` is the one
+   mistake this whole process exists to prevent — and the tool will refuse it anyway, because a
+   refutation needs an observation exhibiting that the doubted condition WAS satisfied.
+
+   There are three statuses and no others: `open`, `supported`, `refuted`.
 """
 
 # ---------------------------------------------------------------------------------------------

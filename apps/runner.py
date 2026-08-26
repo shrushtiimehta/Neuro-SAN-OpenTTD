@@ -20,9 +20,9 @@ would be answering a question the benchmark is asking.
    day budget in the workbench's `advance_days` reads this stamp, and without it a turn can grow
    until it exceeds the server's execution cap and is cancelled with everything in it lost.
 2. Spend reporting. nttd runs no model, so it cannot observe what a turn cost.
-3. The telemetry rows the watcher and planner judge against.
+3. The telemetry rows the watcher, the opener and the closer judge against.
 4. Calling the watcher at intervals, and acting on a `doomed` verdict.
-5. Calling the planner at both boundaries, so the session's knowledge outlives it.
+5. Calling the opener and the closer at the session boundaries, so its knowledge outlives it.
 
 **A dropped stream is not the end of the run.** neuro-san streams a turn over one long HTTP
 response, and anything interrupting it — a slow provider, a laptop sleeping — raises out of
@@ -139,7 +139,7 @@ def company(session: str, token: str, company_id: int = 0) -> dict[str, Any]:
     A SECOND call, because `situation.earning` does not carry `cargo_delivered_total` — it has
     income and per-vehicle profit and nothing cumulative. Reading it off `earning` returned 0 on
     every turn of every run, which made the board's tiebreak metric dead, made `diagnose` report
-    "built but delivering nothing" forever, and fed the planner a false premise to raise claims
+    "built but delivering nothing" forever, and fed the opener a false premise to raise claims
     against. Measured against a live session: earning said 0, the company row said 176.
     """
     try:
@@ -273,7 +273,7 @@ def open_session_to(  # pylint: disable=import-outside-toplevel
 def ask_once(  # pylint: disable=import-outside-toplevel
     network: str, host: str, port: int, message: str, sly: dict | None = None
 ) -> str:
-    """One request to a network that keeps no state between calls: the watcher, the planner.
+    """One request to a network that keeps no state between calls: the watcher, the boundaries.
 
     A fresh session each time on purpose. These are called at intervals rather than in a
     conversation, and carrying a chat context across a whole run would grow it without limit for
@@ -383,15 +383,15 @@ def play(  # pylint: disable=too-many-locals,too-many-branches,too-many-statemen
 
     # --- opening boundary ----------------------------------------------------------------
     if not args.no_planner:
-        print("\n-- planner: opening --")
+        print("\n-- opener --")
         said = ask_once(
-            args.planner,
+            args.opener,
             args.host,
             args.port,
             f"Open session {number}. Conditions: {conditions}. "
             "Read the commons, compile the plan, and raise the claims to test.",
         )
-        print(said or "(the planner said nothing)")
+        print(said or "(nothing was said)")
 
     processor = StreamingInputProcessor(session=open_session_to(network, args.host, args.port))
     state: dict[str, Any] = {
@@ -496,16 +496,16 @@ def play(  # pylint: disable=too-many-locals,too-many-branches,too-many-statemen
     print(f"\n{end_reason or 'the session ended'}. spend ${spent:.2f} over {turn} turn(s).")
 
     if not args.no_planner:
-        print("\n-- planner: closing --")
+        print("\n-- closer --")
         said = ask_once(
-            args.planner,
+            args.closer,
             args.host,
             args.port,
             f"Close session {number}. Conditions: {conditions}. "
             "Revise the claims against the evidence, promote what held up, and "
             "advance the session.",
         )
-        print(said or "(the planner said nothing)")
+        print(said or "(nothing was said)")
 
     return 1 if aborted else 0
 
@@ -540,7 +540,7 @@ def _turn_row(  # pylint: disable=too-many-arguments,too-many-positional-argumen
 
     `sly` is the sly_data the player handed back. The refusal ledger lives there and nowhere else
     — the player can see it while playing, but it is in-memory and per-session, so unless it is
-    copied out here it is gone by the time the planner asks what went wrong. Read from the
+    copied out here it is gone by the time the closer asks what went wrong. Read from the
     returned sly_data rather than persisted by a tool the player calls, because the runner already
     owns the turn stamp and every telemetry write, and the player should not spend a turn's tool
     call on bookkeeping.
@@ -634,7 +634,10 @@ def main() -> int:
     parser.add_argument("--session", required=True, help="Session id from `nttd benchmark`")
     parser.add_argument("--token", default=os.environ.get("NTTD_TOKEN", ""), help="Participant token")
     parser.add_argument("--network", default="nttd_air_player", help="nttd_air_player or nttd_rail_player")
-    parser.add_argument("--planner", default="nttd_planner")
+    # Two networks, not one. Opening and closing need different TOOLS: an opener that could
+    # promote a rule or advance the session could close a session it never watched.
+    parser.add_argument("--opener", default="nttd_opener")
+    parser.add_argument("--closer", default="nttd_closer")
     parser.add_argument("--watcher", default="nttd_watcher")
     parser.add_argument("--host", default=os.environ.get("NEURO_SAN_SERVER_HOST", "localhost"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("NEURO_SAN_SERVER_HTTP_PORT", "8085")))
@@ -651,7 +654,7 @@ def main() -> int:
         help="Take the next session number rather than continuing the current one",
     )
     parser.add_argument("--no-watcher", action="store_true")
-    parser.add_argument("--no-planner", action="store_true")
+    parser.add_argument("--no-planner", action="store_true", help="Skip both session boundaries")
     args = parser.parse_args()
 
     if not args.token:

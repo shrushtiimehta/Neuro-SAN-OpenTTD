@@ -136,9 +136,10 @@ start "studio" "$STUDIO" "python -m neuro_san_studio run"
 for i in $(seq 1 90); do
     served="$(curl -sf -m 2 "http://localhost:$NS_PORT/api/v1/list" 2>/dev/null || true)"
     if echo "$served" | grep -q "$NETWORK" \
-       && echo "$served" | grep -q "nttd_planner" \
+       && echo "$served" | grep -q "nttd_opener" \
+       && echo "$served" | grep -q "nttd_closer" \
        && echo "$served" | grep -q "nttd_watcher"; then
-        echo "[studio] serving $NETWORK, nttd_planner, nttd_watcher after ${i}s"
+        echo "[studio] serving $NETWORK, nttd_opener, nttd_closer, nttd_watcher after ${i}s"
         break
     fi
     [[ $i -eq 90 ]] && { echo "[studio] did not serve the networks; see $LOG_DIR/studio.log"; cleanup; }
@@ -168,7 +169,7 @@ for round in $(seq 1 "$SESSIONS"); do
     echo "token   ${TOKEN:0:11}..."   # truncated: a token in a shared terminal log is a leak
 
     # --fresh only on the FIRST round. Later rounds must keep the playbooks the previous round's
-    # planner promoted into, or the learning loop resets every session and nothing compounds.
+    # closer promoted into, or the learning loop resets every session and nothing compounds.
     ROUND_FRESH=""
     [[ $round -eq 1 ]] && ROUND_FRESH="$FRESH"
 
