@@ -359,3 +359,16 @@ def test_a_demoted_rule_does_not_come_back_on_the_next_fresh():
     seed_playbooks.prepare(fresh=True, mode="air")
     with open(paths.playbook("scout"), encoding="utf-8") as handle:
         assert rule not in handle.read(), "a demotion that the next reseed undoes is not a demotion"
+
+
+def test_every_seed_keeps_the_learned_heading_it_is_spliced_at():
+    """The heading is load-bearing, not decoration.
+
+    `prepare()` splices earned rules under it when composing the working copy, and
+    `promote_claim` appends under it during a session. A seed without it silently produces a
+    playbook that can never carry anything the loop learned.
+    """
+    for section in paths.SECTIONS:
+        with open(REPO_ROOT / paths.seed(section), encoding="utf-8") as handle:
+            body = handle.read()
+        assert paths.LEARNED_HEADER + "\n" in body, f"{section} seed lost its splice point"

@@ -6,9 +6,11 @@ This is strategy, not reference. What an action is called and what it takes is s
 engine at `GET /v1/public/actions`; a hand-written parameter list is the thing that goes stale, so
 there is none here.
 
-Confirmed trials are promoted under the learned-rules heading at the foot of this file, tagged with
-the number of the session that confirmed them. Do not edit those lines by hand — the promotion tool
-owns them, and it will only ever remove a line carrying that tag.
+Supported claims are promoted under the learned-rules heading at the foot of this file, tagged with
+the session that confirmed them and the mode it was played in. Everything above that heading was
+written by a person; everything below it was earned by a session and can be taken back. Do not edit
+the tagged lines by hand — the promotion tool owns them, and it will only ever remove a line
+carrying that tag.
 
 ---
 
