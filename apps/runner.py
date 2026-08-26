@@ -433,27 +433,14 @@ def play(  # pylint: disable=too-many-locals,too-many-branches,too-many-statemen
         firm = company(session, token) if not now.get("ended") else {}
         sly = state.get("sly_data") or {}
         telemetry.record_turn(_turn_row(session, number, turn, now, pos, spent, sly, firm))
-        # Everything the turn row reduces away, kept whole:
-        #   situation  every station and vehicle with its tile and x/y, every route with whether
-        #              it is working and what is missing, and the engine's problem text with its
-        #              own "why it matters" — which on a live run was naming the fix outright.
-        #   company    the cumulative figures the board ranks on.
-        #   sly_data   what the AGENTS built up, and the part with no other record: `sites` is the
-        #              surveyed map, `decisions` is what the strategist chose and why, `routes`
-        #              and `plan` are what it staged. Credentials are excluded by name.
-        if pos or firm:
-            FileIO.write_json(
-                paths.situation_file(number, turn),
-                {
-                    "turn": turn,
-                    "status": now,
-                    "situation": pos,
-                    "company": firm,
-                    "agents": {k: sly.get(k) for k in AGENT_STATE_KEYS if k in sly},
-                },
-                logger,
-            )
-
+        # The agents' own accumulated state. Copied BY NAME, never wholesale: the session id and
+        # the participant token live in sly_data too, and a file on disk is exactly where a
+        # credential must not end up.
+        FileIO.append_jsonl(
+            paths.agent_log(number),
+            {"turn": turn, **{k: sly.get(k) for k in AGENT_STATE_KEYS if k in sly}},
+            logger,
+        )
         said = (state.get("last_chat_response") or "").strip()
         today = int(now.get("game_date") or 0)
         print(f"  turn {turn} (day {max(0, today - started)}): {said[:400]}")

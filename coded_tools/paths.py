@@ -45,7 +45,15 @@ from typing import Final
 CONFIG_DIR: Final = "coded_tools/config_files"
 STATE_DIR: Final = "state"
 HISTORY_DIR: Final = "state/playbook_history"
+# TRANSIENT ONLY. Server stdout, engine stdout, the agents' thinking — output you read while
+# something is going wrong and delete afterwards. Nothing here is required for the next session
+# to run, which is the test for whether a file belongs in logs/ or in state/.
 LOG_DIR: Final = "logs/nttd"
+
+# MAINTAINED. The measured record: per-turn telemetry, the finished-session rows the champion is
+# computed from, and the archive a fresh start moves old runs into. All of it has to survive a
+# `rm -rf logs/`, because the next session reads it to know what beating the best one means.
+TELEMETRY_DIR: Final = "state/telemetry"
 
 # --- the playbooks ------------------------------------------------------------------------
 
@@ -161,30 +169,29 @@ def turn_log(session_number: int) -> str:
     Named by session number so a session lives in exactly one file, and a resumed run appends
     to the one it was already writing rather than starting a second.
     """
-    return os.path.join(LOG_DIR, f"run.s{session_number:03d}.jsonl")
+    return os.path.join(TELEMETRY_DIR, f"run.s{session_number:03d}.jsonl")
 
 
-# One row per FINISHED session: the final figures, which is what "best so far" is computed
-# from. Append-only and never archived, because a champion that vanished when logs were
-# rotated is a champion the next run cannot aim at.
-SESSION_LOG_PATH: Final = os.path.join(LOG_DIR, "sessions.jsonl")
+# One row per FINISHED session: the final figures, which is what "best so far" is computed from.
+# Append-only and never archived — a champion that vanished when logs were rotated is a champion
+# the next run cannot aim at. That sentence was the argument for moving all of this out of logs/.
+SESSION_LOG_PATH: Final = os.path.join(TELEMETRY_DIR, "sessions.jsonl")
 
 
-# The engine's own view of the world, per turn, as JSON.
+# What the AGENTS built up, per turn, from the sly_data they hand back.
 #
-# The player reads this LIVE over HTTP via `read_situation`; nothing reads these files back. They
-# exist so a person can see exactly what the agent was looking at when it decided something —
-# the turn row keeps the dozen numbers the score needs, and drops the stations, the vehicles and
-# the engine's problem text, which is most of what you want when asking why a turn went wrong.
-def situation_file(session_number: int, turn: int) -> str:
-    """One turn's full world payload."""
-    return os.path.join(SITUATION_DIR, f"s{session_number:03d}", f"turn_{turn:03d}.json")
+# Kept because nttd's own artifacts do not have it. `snapshots.parquet` records the world and
+# `tiles.parquet` the raw map, but `sites` is the map as the scout SURVEYED it and `decisions` is
+# what the strategist chose and why — the reasoning behind an action rather than the action.
+# `actions.parquet` has an agent_id column and the workbench leaves it empty, so this is currently
+# the only per-agent record there is.
+def agent_log(session_number: int) -> str:
+    """One JSONL row per turn of what the agents were holding."""
+    return os.path.join(TELEMETRY_DIR, f"agents.s{session_number:03d}.jsonl")
 
-
-SITUATION_DIR: Final = os.path.join(LOG_DIR, "situations")
 
 # Where archived per-session turn logs go on a fresh start.
-ARCHIVE_DIR: Final = os.path.join(LOG_DIR, "prior-runs")
+ARCHIVE_DIR: Final = os.path.join(TELEMETRY_DIR, "prior-runs")
 
 
 def include_archived() -> bool:

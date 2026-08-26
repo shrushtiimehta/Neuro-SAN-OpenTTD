@@ -223,6 +223,30 @@ neuro-san itself.
 
 ---
 
+## 10. logs/ versus state/
+
+**The test is whether the next session needs it.**
+
+`logs/nttd/` is transient: server stdout, engine stdout, the agents' thinking. Read it while
+something is going wrong, delete it afterwards, and nothing breaks. `rm -rf logs/` is always safe.
+
+`state/` is maintained. The playbooks, the claims ledger, the compiled plan — and now
+`state/telemetry/`, which holds the per-turn rows, the finished-session rows the champion is
+computed from, and the per-turn record of what the agents were holding.
+
+The telemetry used to live under `logs/`, which was wrong, and the code said so: the comment on
+`SESSION_LOG_PATH` read "never archived, because a champion that vanished when logs were rotated
+is a champion the next run cannot aim at". A file that must not be rotated is not a log.
+
+Not kept, because nttd already keeps it better: per-turn world snapshots. The engine writes
+`snapshots.parquet` (one row per game day) and `tiles.parquet` (the full map) into
+`nttd/logs/sessions/<id>/`, alongside `result.parquet`, `spend.parquet` and `actions.parquet`.
+What is NOT in any of those is what the agents built up — `sites` is the map as the scout
+surveyed it, `decisions` is what the strategist chose and why — so that is what
+`state/telemetry/agents.sNNN.jsonl` records.
+
+---
+
 ## 10a. Where the seed playbooks came from
 
 Nothing in `coded_tools/config_files/seed_playbook_*.md` was invented. Every line was taken from

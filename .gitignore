@@ -225,3 +225,5 @@ registries/manifest.hocon.test
 /state/*
 !/state/claims.md
 !/state/champion.json
+!/state/telemetry/
+/state/telemetry/prior-runs/
