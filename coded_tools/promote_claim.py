@@ -215,35 +215,33 @@ class PromoteClaim(CodedTool):
     # ----- the seed mirror ---------------------------------------------------------------
 
     def _mirror(self, domain: str, line: str) -> str:
-        """Append the learned line to the seed, under this section's learned heading.
+        """Record the learned line in this mode's learned store, so it survives a `--fresh`.
 
-        Returns `appended`, `duplicate_skipped`, `section_missing` or `seed_missing`. Never
-        raises: the working-copy edit has already succeeded and a seed problem must not undo it.
+        Writes to state/learned/<mode>/, NOT to the seed. The seed is hand-authored, cited and
+        read-only; this is earned, revocable and per-mode. Never raises: the working-copy edit has
+        already succeeded and a problem here must not undo it.
         """
-        book = paths.seed(domain)
-        if not os.path.exists(book):
-            return "seed_missing"
-        body = FileIO.read_text(book)
-        if not body:
-            return "seed_missing"
+        book = paths.learned(domain)
+        body = FileIO.read_text(book) or ""
         if line in body:
-            # Dedup on the exact line so a re-promotion does not double the seed.
+            # Dedup on the exact line so a re-promotion does not double the store.
             return "duplicate_skipped"
-        anchor = paths.LEARNED_HEADER + "\n"
-        if anchor not in body:
-            return "section_missing"
-        updated = body.replace(anchor, anchor + line + "\n", 1)
-        return "appended" if FileIO.write_guarded(book, updated, self.logger) is None else "seed_missing"
+        FileIO.ensure_parent(book)
+        return "appended" if FileIO.write_guarded(book, body + line + "\n", self.logger) is None else "write_failed"
 
     def _unmirror(self, domain: str, line: str) -> str:
-        """Remove the same learned line from the seed. `removed`, `not_found` or `seed_missing`."""
-        book = paths.seed(domain)
+        """Remove the same learned line from this mode's learned store.
+
+        Only ever touches state/learned/. A demotion cannot reach the hand-authored baseline,
+        which is the property that stops a self-correcting loop eating the rules a person wrote.
+        """
+        book = paths.learned(domain)
         if not os.path.exists(book):
-            return "seed_missing"
+            return "not_found"
         lines = FileIO.read_text(book).splitlines()
         if line not in lines:
             return "not_found"
         updated = "\n".join(existing for existing in lines if existing != line)
         if updated:
             updated += "\n"
-        return "removed" if FileIO.write_guarded(book, updated, self.logger) is None else "seed_missing"
+        return "removed" if FileIO.write_guarded(book, updated, self.logger) is None else "write_failed"

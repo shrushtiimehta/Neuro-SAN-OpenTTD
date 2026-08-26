@@ -102,9 +102,19 @@ def prepare(fresh: bool, mode: str | None = None) -> dict[str, Any]:
         elif fresh or not os.path.exists(working):
             FileIO.ensure_parent(working)
             with open(source, encoding="utf-8") as handle:
-                body = handle.read()
+                body = for_mode(handle.read(), mode)
+            # The working copy is the baseline plus what this mode has earned. Composed here
+            # rather than stored composed, so the two can never be confused and only the learned
+            # half is ever revocable.
+            earned = FileIO.read_text(paths.learned(section, mode)) or ""
+            if earned.strip():
+                anchor = paths.LEARNED_HEADER + "\n"
+                if anchor in body:
+                    body = body.replace(anchor, anchor + earned.rstrip("\n") + "\n", 1)
+                else:
+                    logger.warning("%s has no '%s'; learned rules not applied", source, paths.LEARNED_HEADER)
             with open(working, "w", encoding="utf-8") as handle:
-                handle.write(for_mode(body, mode))
+                handle.write(body)
             outcome[section] = "reseeded"
         else:
             outcome[section] = "kept"

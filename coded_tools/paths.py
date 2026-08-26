@@ -116,8 +116,25 @@ def playbook(section: str) -> str:
 
 
 def seed(section: str) -> str:
-    """One agent's seed: baseline plus everything promoted so far. Survives a fresh start."""
+    """One agent's hand-authored baseline. READ-ONLY: no tool writes here.
+
+    It used to be "baseline plus everything promoted so far", with `promote_claim` appending
+    learned rules to it. That put model-generated text into a hand-authored file shipped inside
+    the package, mixed both modes' findings into one file, and made the per-mode split depend on
+    parsing a tag out of a line. What the loop learns is state, and it lives in state/.
+    """
     return os.path.join(CONFIG_DIR, f"seed_playbook_{section}.md")
+
+
+def learned(section: str, mode: str | None = None) -> str:
+    """What the loop promoted for one job in one mode. Append-only, and what survives `--fresh`.
+
+    Separate from the baseline so the two can never be confused: the baseline is authored and
+    cited, this is earned and revocable, and only lines here are demotable. Separate per mode
+    because a rule an air session established is not rail doctrine — the claim that produced it
+    carries CONDITIONS and Gate 3 would flag it, but a promoted line is just text.
+    """
+    return os.path.join(STATE_DIR, "learned", mode or active_mode(), f"playbook_{section}.md")
 
 
 # One per agent in a player network. The names are the job rather than the class, so a section

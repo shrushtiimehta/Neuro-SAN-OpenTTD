@@ -308,3 +308,54 @@ def test_state_read_resolves_the_mode_placeholder():
         reply = StateRead().invoke({"name": "playbook_builder", "name_map": mapping}, {})
         assert reply["file_path"] == f"state/{mode}/playbook_builder.md", reply
         assert f"### {mine}:" in reply["content"] and f"### {theirs}:" not in reply["content"]
+
+
+# --- the baseline is authored; what the loop learns is state ---------------------------------------
+
+
+def test_promotion_never_writes_into_the_hand_authored_baseline():
+    seed_playbooks.prepare(fresh=True, mode="air")
+    with open(paths.seed("scout"), encoding="utf-8") as handle:
+        before = handle.read()
+    PromoteClaim().invoke(
+        {
+            "domain": "scout",
+            "edit_type": "add_line",
+            "new_text": "Coastal pairs beat inland on t1.",
+            "session_number": 4,
+        },
+        {},
+    )
+    with open(paths.seed("scout"), encoding="utf-8") as handle:
+        assert handle.read() == before, "the seed is authored and cited; model output goes to state/learned/"
+    with open(paths.learned("scout"), encoding="utf-8") as handle:
+        assert "Coastal pairs beat inland" in handle.read()
+
+
+def test_a_learned_rule_survives_fresh_but_stays_in_its_own_mode():
+    seed_playbooks.prepare(fresh=True, mode="air")
+    PromoteClaim().invoke(
+        {
+            "domain": "scout",
+            "edit_type": "add_line",
+            "new_text": "Coastal pairs beat inland on t1.",
+            "session_number": 4,
+        },
+        {},
+    )
+    seed_playbooks.prepare(fresh=True, mode="air")
+    with open(paths.playbook("scout"), encoding="utf-8") as handle:
+        assert "Coastal pairs beat inland" in handle.read(), "--fresh must not lose what was earned"
+    seed_playbooks.prepare(fresh=True, mode="rail")
+    with open(paths.playbook("scout"), encoding="utf-8") as handle:
+        assert "Coastal pairs beat inland" not in handle.read()
+
+
+def test_a_demoted_rule_does_not_come_back_on_the_next_fresh():
+    seed_playbooks.prepare(fresh=True, mode="air")
+    rule = "Coastal pairs beat inland on t1."
+    PromoteClaim().invoke({"domain": "scout", "edit_type": "add_line", "new_text": rule, "session_number": 4}, {})
+    PromoteClaim().invoke({"domain": "scout", "edit_type": "remove_line", "find_text": rule}, {})
+    seed_playbooks.prepare(fresh=True, mode="air")
+    with open(paths.playbook("scout"), encoding="utf-8") as handle:
+        assert rule not in handle.read(), "a demotion that the next reseed undoes is not a demotion"

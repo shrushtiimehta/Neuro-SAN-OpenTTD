@@ -227,3 +227,7 @@ registries/manifest.hocon.test
 !/state/champion.json
 !/state/telemetry/
 /state/telemetry/prior-runs/
+# What the loop earned. Same category as claims.md: it cannot be regenerated from anything, and
+# a clone without it starts over. The working playbooks under state/air|rail/ are composed from
+# the baseline plus these, so they stay ignored.
+!/state/learned/
